@@ -32,6 +32,7 @@ export function createConnectionPool(): mariadb.Pool {
       user: config.user,
       password: config.password,
       database: config.database,
+      bigIntAsNumber: true, // Add this line to convert BIGINT to Numbers
       connectionLimit: 2,
       connectTimeout: DEFAULT_TIMEOUT,
     });
@@ -82,11 +83,27 @@ export async function executeQuery(
       timeout: DEFAULT_TIMEOUT,
     });
 
+    // Process rows to convert Buffer objects to hex strings
+    let processedRows;
+    if (Array.isArray(rows)) {
+      processedRows = rows.map(row => {
+        const processedRow = {...row};
+        for (const key in processedRow) {
+          if (Buffer.isBuffer(processedRow[key])) {
+            processedRow[key] = processedRow[key].toString('hex');
+          }
+        }
+        return processedRow;
+      });
+    } else {
+      processedRows = rows;
+    }
+
     // Apply row limit if result is an array
     const limitedRows =
-      Array.isArray(rows) && rows.length > DEFAULT_ROW_LIMIT
-        ? rows.slice(0, DEFAULT_ROW_LIMIT)
-        : rows;
+      Array.isArray(processedRows) && processedRows.length > DEFAULT_ROW_LIMIT
+        ? processedRows.slice(0, DEFAULT_ROW_LIMIT)
+        : processedRows;
 
     // Log result summary
     console.error(
