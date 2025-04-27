@@ -45,7 +45,7 @@ const config = {
   port: process.env.MARIADB_PORT || '3306',
   user: process.env.MARIADB_USER,
   password: process.env.MARIADB_PASSWORD,
-  database: process.env.MARIADB_DATABASE || 'teste_db',
+  database: process.env.MARIADB_DATABASE,
   allowInsert: process.env.MARIADB_ALLOW_INSERT !== 'false',
   allowUpdate: process.env.MARIADB_ALLOW_UPDATE !== 'false',
   allowDelete: process.env.MARIADB_ALLOW_DELETE !== 'false',
@@ -111,7 +111,24 @@ async function main() {
     });
     console.log('Result:', JSON.stringify(queryResult, null, 2));
     
-    console.log('\nAll tests completed successfully!');
+        // Test list_foreign_keys (on orders table, which has the FK)
+        console.log('\n5. Testing list_foreign_keys tool...');
+        const fkResult = await callTool(server, 'list_foreign_keys', {
+          database: config.database,
+          table: 'orders' // Test on the table with the FK constraint
+        });
+        console.log('Result:', JSON.stringify(fkResult, null, 2));
+    
+    
+        // Test list_indexes (on users table, which has PK and unique index)
+        console.log('\n6. Testing list_indexes tool...');
+        const indexResult = await callTool(server, 'list_indexes', {
+          database: config.database,
+          table: 'users' // Test on the table with indexes
+        });
+        console.log('Result:', JSON.stringify(indexResult, null, 2));
+    
+        console.log('\nAll tests completed successfully!'); // Move this line down
   } catch (error) {
     console.error('\n❌ Error:', error.message);
   } finally {

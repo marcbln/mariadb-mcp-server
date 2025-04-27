@@ -177,6 +177,49 @@ Executes a SQL query.
 }
 ```
 
+```
+    }
+  }
+```
+
+### list_foreign_keys
+Lists all foreign key constraints defined *on* a specific table, showing which other tables/columns they reference.
+
+**Parameters**:
+- `database` (optional): Database name (uses default if not specified)
+- `table` (required): The table to list foreign keys for
+
+**Example**:
+```json
+{
+  "server_name": "mariadb",
+  "tool_name": "list_foreign_keys",
+  "arguments": {
+    "database": "my_database",
+    "table": "orders"
+  }
+}
+```
+
+### list_indexes
+Lists all indexes (including primary and unique keys) defined on a specific table.
+
+**Parameters**:
+- `database` (optional): Database name (uses default if not specified)
+- `table` (required): The table to list indexes for
+
+**Example**:
+```json
+{
+  "server_name": "mariadb",
+  "tool_name": "list_indexes",
+  "arguments": {
+    "database": "my_database",
+    "table": "users"
+  }
+}
+```
+
 ## Testing
 The server includes test scripts to verify functionality with your MariaDB / MySQL setup:
 

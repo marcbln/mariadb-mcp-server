@@ -92,6 +92,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "list_foreign_keys",
+        description: "Lists all foreign key constraints defined on a specific table, showing which other tables/columns they reference",
+        inputSchema: {
+          type: "object",
+          properties: {
+            database: {
+              type: "string",
+              description: "Database name (optional, uses default if not specified)",
+            },
+            table: {
+              type: "string",
+              description: "The table to list foreign keys for",
+            },
+          },
+          required: ["table"],
+        },
+      },
+      {
+        name: "list_indexes",
+        description: "Lists all indexes (including primary and unique keys) defined on a specific table.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            database: {
+              type: "string",
+              description: "Database name (optional, uses default if not specified)",
+            },
+            table: {
+              type: "string",
+              description: "The table to list indexes for",
+            },
+          },
+          required: ["table"],
+        },
+      },
+      {
         name: "execute_query",
         description: "Execute a SQL query",
         inputSchema: {
@@ -201,6 +237,105 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         `;
 
         const { rows } = await executeQuery(sql, { dbName, tableName: table }, undefined);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "list_foreign_keys": {
+        console.error("[Tool] Executing list_foreign_keys");
+
+        const database = request.params.arguments?.database as string | undefined;
+        const table = request.params.arguments?.table as string;
+
+        if (!table) {
+          throw new McpError(ErrorCode.InvalidParams, "Table name is required");
+        }
+        // Basic validation for table name (adjust regex if needed)
+        if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+           throw new McpError(ErrorCode.InvalidParams, "Invalid table name format.");
+        }
+
+        const dbName = database || (await getConfigFromEnv()).database;
+        if (!dbName) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Database name is required (either in arguments or environment config)"
+          );
+        }
+        // Basic validation for database name (adjust regex if needed)
+         if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
+           throw new McpError(ErrorCode.InvalidParams, "Invalid database name format.");
+        }
+
+        const sql = `
+          SELECT
+              CONSTRAINT_NAME,
+              COLUMN_NAME,
+              REFERENCED_TABLE_SCHEMA,
+              REFERENCED_TABLE_NAME,
+              REFERENCED_COLUMN_NAME
+          FROM
+              information_schema.KEY_COLUMN_USAGE
+          WHERE
+              TABLE_SCHEMA = :dbName
+              AND TABLE_NAME = :tableName
+              AND REFERENCED_TABLE_NAME IS NOT NULL;
+        `;
+
+        // Use undefined for the third argument as database context is in the WHERE clause
+        const { rows } = await executeQuery(sql, { dbName, tableName: table }, undefined);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "list_indexes": {
+        console.error("[Tool] Executing list_indexes");
+
+        const database = request.params.arguments?.database as string | undefined;
+        const table = request.params.arguments?.table as string;
+
+        if (!table) {
+          throw new McpError(ErrorCode.InvalidParams, "Table name is required");
+        }
+        // Basic validation for table name (adjust regex if needed for safety)
+         if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+           throw new McpError(ErrorCode.InvalidParams, "Invalid table name format.");
+        }
+
+        const dbName = database || (await getConfigFromEnv()).database;
+        // Although SHOW INDEX FROM `db`.`table` might work, using the connection's
+        // database context is generally safer and more common.
+        if (!dbName) {
+           throw new McpError(
+            ErrorCode.InvalidParams,
+            "Database name is required for context (either in arguments or environment config)"
+          );
+        }
+         // Basic validation for database name (adjust regex if needed)
+         if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
+           throw new McpError(ErrorCode.InvalidParams, "Invalid database name format.");
+        }
+
+        // IMPORTANT: SHOW INDEX doesn't typically support placeholders.
+        // We rely on prior validation of the table name.
+        const sql = `SHOW INDEX FROM \`${table}\``;
+
+        // Pass dbName as the third argument to set the database context for the connection
+        const { rows } = await executeQuery(sql, [], dbName);
 
         return {
           content: [
