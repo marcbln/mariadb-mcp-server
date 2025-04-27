@@ -26,7 +26,7 @@ import * as dotenv from 'dotenv';
 
 // Load environment variables from .env file
 dotenv.config();
-const TEST_DB = 't2';
+const TEST_DB = 'mariadb_mcp_test_db'; 
 const TEST_TABLE = 'test_users';
 
 // Configuration from environment variables

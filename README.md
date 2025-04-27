@@ -5,7 +5,7 @@ This MCP server provides access to MariaDB / MySQL databases.
 It allows you to:
 - List available databases
 - List tables in a database
-- Describe table schemas
+- Analyze table schemas (columns, foreign keys, indexes)
 - Execute SQL queries
 
 ## Security Features
@@ -138,22 +138,41 @@ Lists all tables in a specified database.
   }
 }
 ```
-
-### describe_table
-Shows the schema for a specific table.
+### analyze_table_schema
+Provides a comprehensive analysis of table schemas, including columns, foreign keys, and indexes, with varying levels of detail.
 
 **Parameters**:
-- `database` (optional): Database name (uses default if not specified)
-- `table` (required): Table name
+- `database` (optional, string): Database name (uses default if not specified).
+- `table_names` (required, array of strings): An array of one or more table names to analyze.
+- `detail_level` (optional, string): Controls the level of detail returned. Defaults to `STANDARD`.
+    - `BASIC`: Includes basic column information (name, type).
+    - `STANDARD`: Adds foreign key constraints and basic index information (index names).
+    - `FULL`: Includes full column details, foreign key details (including update/delete rules), and full index details.
 
-**Example**:
+**Output Structure**:
+Returns a JSON object where keys are the requested table names. Each table name maps to an object containing potentially `columns`, `foreign_keys`, and `indexes` arrays, depending on the `detail_level`. If an error occurs for a specific table (e.g., table not found), the table's value will be an object like `{"error": "Error message..."}`.
+
+**Example (Standard Detail)**:
 ```json
 {
   "server_name": "mariadb",
-  "tool_name": "describe_table",
+  "tool_name": "analyze_table_schema",
   "arguments": {
     "database": "my_database",
-    "table": "my_table"
+    "table_names": ["users", "orders"]
+  }
+}
+```
+
+**Example (Full Detail for one table)**:
+```json
+{
+  "server_name": "mariadb",
+  "tool_name": "analyze_table_schema",
+  "arguments": {
+    "database": "my_database",
+    "table_names": ["users"],
+    "detail_level": "FULL"
   }
 }
 ```
@@ -180,44 +199,6 @@ Executes a SQL query.
 ```
     }
   }
-```
-
-### list_foreign_keys
-Lists all foreign key constraints defined *on* a specific table, showing which other tables/columns they reference.
-
-**Parameters**:
-- `database` (optional): Database name (uses default if not specified)
-- `table` (required): The table to list foreign keys for
-
-**Example**:
-```json
-{
-  "server_name": "mariadb",
-  "tool_name": "list_foreign_keys",
-  "arguments": {
-    "database": "my_database",
-    "table": "orders"
-  }
-}
-```
-
-### list_indexes
-Lists all indexes (including primary and unique keys) defined on a specific table.
-
-**Parameters**:
-- `database` (optional): Database name (uses default if not specified)
-- `table` (required): The table to list indexes for
-
-**Example**:
-```json
-{
-  "server_name": "mariadb",
-  "tool_name": "list_indexes",
-  "arguments": {
-    "database": "my_database",
-    "table": "users"
-  }
-}
 ```
 
 ## Testing
