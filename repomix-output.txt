@@ -1,0 +1,669 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+
+Additional Info:
+----------------
+
+================================================================
+Directory Structure
+================================================================
+connection.ts
+index.ts
+types.ts
+validators.ts
+
+================================================================
+Files
+================================================================
+
+================
+File: connection.ts
+================
+/**
+ * MariaDB connection management for MCP server
+ */
+
+import mariadb from "mariadb";
+import { MariaDBConfig } from "./types.js";
+import { isAlloowedQuery } from "./validators.js";
+
+// Default connection timeout in milliseconds
+const DEFAULT_TIMEOUT = 10000;
+
+// Default row limit for query results
+const DEFAULT_ROW_LIMIT = 1000;
+
+let pool: mariadb.Pool | null = null;
+let connection: mariadb.PoolConnection | null = null;
+
+/**
+ * Create a MariaDB connection pool
+ */
+export function createConnectionPool(): mariadb.Pool {
+  console.error("[Setup] Creating MariaDB connection pool");
+  const config = getConfigFromEnv();
+  if (pool) {
+    console.error("[Setup] Connection pool already exists");
+    return pool;
+  }
+  try {
+    pool = mariadb.createPool({
+      host: config.host,
+      port: config.port,
+      user: config.user,
+      password: config.password,
+      database: config.database,
+      bigIntAsNumber: true, // Add this line to convert BIGINT to Numbers
+      connectionLimit: 2,
+      connectTimeout: DEFAULT_TIMEOUT,
+    });
+  } catch (error) {
+    console.error("[Error] Failed to create connection pool:", error);
+    throw error;
+  }
+  return pool;
+}
+
+/**
+ * Execute a query with error handling and logging
+ */
+export async function executeQuery(
+  sql: string,
+  params: any[] = [],
+  database?: string
+): Promise<{ rows: any; fields: mariadb.FieldInfo[] }> {
+  console.error(`[Query] Executing: ${sql}`);
+  // Create connection pool if not already created
+  if (!pool) {
+    console.error("[Setup] Connection pool not found, creating a new one");
+    pool = createConnectionPool();
+  }
+  try {
+    // Get connection from pool
+    if (connection) {
+      console.error("[Query] Reusing existing connection");
+    } else {
+      console.error("[Query] Creating new connection");
+      connection = await pool.getConnection();
+    }
+
+    // Use specific database if provided
+    if (database) {
+      console.error(`[Query] Using database: ${database}`);
+      await connection.query(`USE \`${database}\``);
+    }
+    if (!isAlloowedQuery(sql)) {
+      throw new Error("Query not allowed");
+    }
+    // Execute query with timeout
+    const [rows, fields] = await connection.query({
+      metaAsArray: true,
+      namedPlaceholders: true,
+      sql,
+      ...params,
+      timeout: DEFAULT_TIMEOUT,
+    });
+
+    // Process rows to convert Buffer objects to hex strings
+    let processedRows;
+    if (Array.isArray(rows)) {
+      processedRows = rows.map(row => {
+        const processedRow = {...row};
+        for (const key in processedRow) {
+          if (Buffer.isBuffer(processedRow[key])) {
+            processedRow[key] = processedRow[key].toString('hex');
+          }
+        }
+        return processedRow;
+      });
+    } else {
+      processedRows = rows;
+    }
+
+    // Apply row limit if result is an array
+    const limitedRows =
+      Array.isArray(processedRows) && processedRows.length > DEFAULT_ROW_LIMIT
+        ? processedRows.slice(0, DEFAULT_ROW_LIMIT)
+        : processedRows;
+
+    // Log result summary
+    console.error(
+      `[Query] Success: ${
+        Array.isArray(rows) ? rows.length : 1
+      } rows returned with ${JSON.stringify(params)}`
+    );
+
+    return { rows: limitedRows, fields };
+  } catch (error) {
+    if (connection) {
+      connection.release();
+      console.error("[Query] Connection released with error");
+    }
+    console.error("[Error] Query execution failed:", error);
+    throw error;
+  } finally {
+    // Release connection back to pool
+    if (connection) {
+      connection.release();
+      console.error("[Query] Connection released");
+    }
+  }
+}
+
+/**
+ * Get MariaDB connection configuration from environment variables
+ */
+export function getConfigFromEnv(): MariaDBConfig {
+  const host = process.env.MARIADB_HOST;
+  const portStr = process.env.MARIADB_PORT;
+  const user = process.env.MARIADB_USER;
+  const password = process.env.MARIADB_PASSWORD;
+  const database = process.env.MARIADB_DATABASE;
+  const allow_insert = process.env.MARIADB_ALLOW_INSERT === "true";
+  const allow_update = process.env.MARIADB_ALLOW_UPDATE === "true";
+  const allow_delete = process.env.MARIADB_ALLOW_DELETE === "true";
+
+  if (!host) throw new Error("MARIADB_HOST environment variable is required");
+  if (!user) throw new Error("MARIADB_USER environment variable is required");
+  if (!password)
+    throw new Error("MARIADB_PASSWORD environment variable is required");
+
+  const port = portStr ? parseInt(portStr, 10) : 3306;
+
+  console.error("[Setup] MariaDB configuration:", {
+    host: host,
+    port: port,
+    user: user,
+    database: database || "(default not set)",
+  });
+
+  return {
+    host,
+    port,
+    user,
+    password,
+    database,
+    allow_insert,
+    allow_update,
+    allow_delete,
+  };
+}
+
+export function endConnection() {
+  if (pool) {
+    return pool.end();
+  }
+}
+
+================
+File: index.ts
+================
+#!/usr/bin/env node
+
+/**
+ * MariaDB Database Access MCP Server
+ *
+ * This MCP server provides access to MariaDB databases.
+ * It allows:
+ * - Listing available databases
+ * - Listing tables in a database
+ * - Describing table schemas
+ * - Executing read-only SQL queries
+ */
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+
+import {
+  createConnectionPool,
+  executeQuery,
+  endConnection,
+} from "./connection.js";
+
+/**
+ * Create an MCP server with tools for MariaDB database access
+ */
+const server = new Server(
+  {
+    name: "mariadb-mcp-server",
+    version: "0.0.1",
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
+/**
+ * Handler that lists available tools for MariaDB database access
+ */
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [
+      {
+        name: "list_databases",
+        description: "List all accessible databases on the MariaDB server",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "list_tables",
+        description: "List all tables in a specified database",
+        inputSchema: {
+          type: "object",
+          properties: {
+            database: {
+              type: "string",
+              description:
+                "Database name (optional, uses default if not specified)",
+            },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "describe_table",
+        description: "Show the schema for a specific table",
+        inputSchema: {
+          type: "object",
+          properties: {
+            database: {
+              type: "string",
+              description:
+                "Database name (optional, uses default if not specified)",
+            },
+            table: {
+              type: "string",
+              description: "Table name",
+            },
+          },
+          required: ["table"],
+        },
+      },
+      {
+        name: "execute_query",
+        description: "Execute a SQL query",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: `SQL query (only SELECT, ${
+                process.env.MARIADB_ALLOW_INSERT ? "INSERT," : ""
+              } ${process.env.MARIADB_ALLOW_UPDATE ? "UPDATE," : ""} ${
+                process.env.MARIADB_ALLOW_DELETE ? "DELETE," : ""
+              } SHOW, DESCRIBE, and EXPLAIN statements are allowed)`,
+            },
+            database: {
+              type: "string",
+              description:
+                "Database name (optional, uses default if not specified)",
+            },
+          },
+          required: ["query"],
+        },
+      },
+    ],
+  };
+});
+
+/**
+ * Handler for MariaDB database access tools
+ */
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  try {
+    createConnectionPool();
+  } catch (error) {
+    console.error("[Fatal] Failed to initialize MariaDB connection:", error);
+    process.exit(1);
+  }
+
+  try {
+    switch (request.params.name) {
+      case "list_databases": {
+        console.error("[Tool] Executing list_databases");
+        const { rows } = await executeQuery("SHOW DATABASES");
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "list_tables": {
+        console.error("[Tool] Executing list_tables");
+
+        const database = request.params.arguments?.database as
+          | string
+          | undefined;
+
+        const { rows } = await executeQuery("SHOW FULL TABLES", [], database);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "describe_table": {
+        console.error("[Tool] Executing describe_table");
+
+        const database = request.params.arguments?.database as
+          | string
+          | undefined;
+        const table = request.params.arguments?.table as string;
+
+        if (!table) {
+          throw new McpError(ErrorCode.InvalidParams, "Table name is required");
+        }
+
+        const { rows } = await executeQuery(
+          `DESCRIBE \`${table}\``,
+          [],
+          database
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "execute_query": {
+        console.error("[Tool] Executing execute_query");
+
+        const query = request.params.arguments?.query as string;
+        const database = request.params.arguments?.database as
+          | string
+          | undefined;
+
+        if (!query) {
+          throw new McpError(ErrorCode.InvalidParams, "Query is required");
+        }
+
+        const { rows } = await executeQuery(query, [], database);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new McpError(
+          ErrorCode.MethodNotFound,
+          `Unknown tool: ${request.params.name}`
+        );
+    }
+  } catch (error) {
+    console.error("[Error] Tool execution failed:", error);
+
+    // Format error message for client
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        },
+      ],
+      isError: true,
+    };
+  }
+});
+
+/**
+ * Start the server using stdio transport
+ */
+async function main() {
+  console.error("[Setup] Starting MariaDB MCP server");
+
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("[Setup] MariaDB MCP server running on stdio");
+  } catch (error) {
+    console.error("[Fatal] Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+// Handle process termination
+process.on("SIGINT", async () => {
+  console.error("[Shutdown] Closing MariaDB connection pool");
+  await endConnection();
+  process.exit(0);
+});
+
+// Start the server
+main().catch((error) => {
+  console.error("[Fatal] Unhandled error:", error);
+  process.exit(1);
+});
+
+================
+File: types.ts
+================
+/**
+ * Type definitions for MariaDB MCP server
+ */
+
+// MariaDB connection configuration
+export interface MariaDBConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database?: string;
+  allow_insert: boolean;
+  allow_update: boolean;
+  allow_delete: boolean;
+}
+
+// Database information
+export interface DatabaseInfo {
+  name: string;
+}
+
+// Table information
+export interface TableInfo {
+  name: string;
+  type: string;
+}
+
+// Column information
+export interface ColumnInfo {
+  Field: string;
+  Type: string;
+  Null: string;
+  Key: string;
+  Default: string | null;
+  Extra: string;
+}
+
+// Query result
+export interface QueryResult {
+  rows: any[];
+  fields: any[];
+}
+
+================
+File: validators.ts
+================
+/**
+ * SQL query validators for MariaDB MCP server
+ * Ensures that only read-only queries are allowed
+ */
+
+// List of allowed SQL commands
+const ALLOWED_COMMANDS = [
+  "SELECT",
+  "SHOW",
+  "DESCRIBE",
+  "DESC",
+  "EXPLAIN",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+];
+
+// List of disallowed SQL commands (write operations)
+const DISALLOWED_COMMANDS = [
+  "DROP",
+  "CREATE",
+  "ALTER",
+  "TRUNCATE",
+  "RENAME",
+  "REPLACE",
+  "GRANT",
+  "REVOKE",
+  "LOCK",
+  "UNLOCK",
+  "CALL",
+  "EXEC",
+  "EXECUTE",
+  "SET",
+  "START",
+  "BEGIN",
+  "COMMIT",
+  "ROLLBACK",
+];
+
+/**
+ * Validates if a SQL query is read-only
+ * @param query SQL query to validate
+ * @returns true if the query is read-only, false otherwise
+ */
+export function isAlloowedQuery(query: string): boolean {
+  // Normalize query by removing comments and extra whitespace
+  const normalizedQuery = query
+    .replace(/--.*$/gm, "") // Remove single-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
+    .replace(/\s+/g, " ") // Normalize whitespace
+    .trim()
+    .toUpperCase();
+  const ALLOW_INSERT = process.env.MARIADB_ALLOW_INSERT === "true";
+  const ALLOW_UPDATE = process.env.MARIADB_ALLOW_UPDATE === "true";
+  const ALLOW_DELETE = process.env.MARIADB_ALLOW_DELETE === "true";
+
+  // Check if query starts with an allowed command
+  const startsWithAllowed = ALLOWED_COMMANDS.some(
+    (cmd) => normalizedQuery.startsWith(cmd + " ") || normalizedQuery === cmd
+  );
+  const startsWithAllowedNoSpace =
+    normalizedQuery.startsWith("INSERT") && !ALLOW_INSERT;
+  // Check if query contains any disallowed commands
+  const containsDisallowed = DISALLOWED_COMMANDS.some((cmd) => {
+    if (cmd === "INSERT" && !ALLOW_INSERT) {
+      return false; // Skip INSERT if not allowed
+    }
+    if (cmd === "UPDATE" && !ALLOW_UPDATE) {
+      return false; // Skip UPDATE if not allowed
+    }
+    if (cmd === "DELETE" && !ALLOW_DELETE) {
+      return false; // Skip DELETE if not allowed
+    }
+    const regex = new RegExp(`(^|\\s)${cmd}(\\s|$)`);
+    return regex.test(normalizedQuery);
+  });
+
+  // Check for multiple statements (;)
+  const hasMultipleStatements =
+    normalizedQuery.includes(";") && !normalizedQuery.endsWith(";");
+
+  // Query is read-only if it starts with an allowed command,
+  // doesn't contain any disallowed commands, and doesn't have multiple statements
+  return startsWithAllowed && !containsDisallowed && !hasMultipleStatements;
+}
+
+/**
+ * Validates if a SQL query is safe to execute
+ * @param query SQL query to validate
+ * @throws Error if the query is not safe
+ */
+export function validateQuery(query: string): void {
+  console.error("[Validator] Validating query:", query);
+
+  if (!query || typeof query !== "string") {
+    throw new Error("Query must be a non-empty string");
+  }
+
+  if (!isAlloowedQuery(query)) {
+    console.error("[Validator] Query rejected: not allowed");
+    throw new Error(
+      "Query contains disallowed commands or is not permitted by current configuration"
+    );
+  }
+
+  console.error("[Validator] Query validated");
+}
+
+
+
+================================================================
+End of Codebase
+================================================================

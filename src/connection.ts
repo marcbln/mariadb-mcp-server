@@ -48,7 +48,7 @@ export function createConnectionPool(): mariadb.Pool {
  */
 export async function executeQuery(
   sql: string,
-  params: any[] = [],
+  params: any[] | { [key: string]: any } = [],
   database?: string
 ): Promise<{ rows: any; fields: mariadb.FieldInfo[] }> {
   console.error(`[Query] Executing: ${sql}`);
@@ -75,13 +75,22 @@ export async function executeQuery(
       throw new Error("Query not allowed");
     }
     // Execute query with timeout
-    const [rows, fields] = await connection.query({
+    const queryOptions: mariadb.QueryOptions = {
       metaAsArray: true,
       namedPlaceholders: true,
       sql,
-      ...params,
       timeout: DEFAULT_TIMEOUT,
-    });
+    };
+
+    // If using named placeholders, pass the params object directly
+    if (queryOptions.namedPlaceholders) {
+      (queryOptions as any).values = params; // Pass the object as 'values'
+    } else {
+      // Otherwise, spread the array (original behavior)
+      Object.assign(queryOptions, params);
+    }
+
+    const [rows, fields] = await connection.query(queryOptions);
 
     // Process rows to convert Buffer objects to hex strings
     let processedRows;

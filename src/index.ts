@@ -24,6 +24,7 @@ import {
   createConnectionPool,
   executeQuery,
   endConnection,
+  getConfigFromEnv,
 } from "./connection.js";
 
 /**
@@ -174,11 +175,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "Table name is required");
         }
 
-        const { rows } = await executeQuery(
-          `DESCRIBE \`${table}\``,
-          [],
-          database
-        );
+        const dbName = database || (await getConfigFromEnv()).database;
+        if (!dbName) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Database name is required (either in arguments or environment config)"
+          );
+        }
+
+        const sql = `
+          SELECT
+              COLUMN_NAME AS Field,
+              COLUMN_TYPE AS Type,
+              IS_NULLABLE AS \`Null\`,
+              COLUMN_KEY AS \`Key\`,
+              COLUMN_DEFAULT AS \`Default\`,
+              EXTRA AS Extra,
+              COLUMN_COMMENT AS Comment
+          FROM
+              INFORMATION_SCHEMA.COLUMNS
+          WHERE
+              TABLE_SCHEMA = :dbName AND TABLE_NAME = :tableName
+          ORDER BY
+              ORDINAL_POSITION;
+        `;
+
+        const { rows } = await executeQuery(sql, { dbName, tableName: table }, undefined);
 
         return {
           content: [
