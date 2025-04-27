@@ -51,8 +51,12 @@ if (!config.user || !config.password) {
 }
 
 // Create a connection pool
+// Create a connection pool *without* specifying the database initially
+const poolConfig = { ...config };
+delete poolConfig.database; // Remove database from initial pool config
 const pool = mariadb.createPool({
-    ...config,
+    ...poolConfig,
+    ssl: false, // Explicitly disable SSL like --skip_ssl
     connectionLimit: 10
 });
 
@@ -66,6 +70,17 @@ async function main() {
     console.log(`User: ${config.user}`);
     console.log(`Database: ${config.database || 'N/A'}`);
     console.log(`Allow Insert: ${config.allowInsert}`);
+// Ensure the database exists before testing the pool with it implicitly
+        console.log(`Ensuring database '${TEST_DB}' exists...`);
+        let conn;
+        try {
+            conn = await pool.getConnection(); // Get connection without specific DB
+            await conn.query(`CREATE DATABASE IF NOT EXISTS \`${TEST_DB}\`;`);
+            console.log(`✅ Database '${TEST_DB}' ensured.`);
+        } finally {
+            if (conn) conn.release();
+        }
+        console.log();
     console.log(`Allow Update: ${config.allowUpdate}`);
     console.log(`Allow Delete: ${config.allowDelete}`);
     console.log();
@@ -159,62 +174,75 @@ async function createTestDatabase() {
  * Create the test table
  */
 async function createTestTable() {
-    await pool.query(`USE ${TEST_DB}`);
-    // Drop tables if they exist (in order to handle FK constraints)
-    await pool.query(`DROP TABLE IF EXISTS test_orders`);
-    await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE}`);
+    let conn;
+    try {
+        conn = await pool.getConnection(); // Get a dedicated connection
+        await conn.query(`USE \`${TEST_DB}\``); // Set DB context for this connection
 
-    // Add a small delay to ensure tables are dropped
-    await new Promise(resolve => setTimeout(resolve, 100));
+        // Drop tables if they exist (in order to handle FK constraints)
+        await conn.query(`DROP TABLE IF EXISTS test_orders`);
+        await conn.query(`DROP TABLE IF EXISTS \`${TEST_TABLE}\``); // Use backticks for safety
 
-    // Create users table with an index
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS ${TEST_TABLE}
-        (
-            id         INT AUTO_INCREMENT PRIMARY KEY,
-            name       VARCHAR(100) NOT NULL COMMENT 'User full name',
-            email      VARCHAR(100) NOT NULL COMMENT 'User email address',
-            age        INT COMMENT 'User age',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY \`idx_email\` (email) COMMENT 'Ensure email is unique'
-        ) COMMENT ='Stores test user information';
-    `);
-    console.log(`   - Table '${TEST_TABLE}' created with index.`);
+        // Add a small delay to ensure tables are dropped
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Create orders table with a foreign key
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS test_orders
-        (
-            order_id     INT AUTO_INCREMENT PRIMARY KEY,
-            user_id      INT,
-            product_name VARCHAR(100),
-            order_date   DATE,
-            CONSTRAINT fk_user_order FOREIGN KEY (user_id) REFERENCES ${TEST_TABLE} (id) ON DELETE SET NULL
-        ) COMMENT ='Stores test user orders';
-    `);
-    console.log(`   - Table 'test_orders' created with foreign key.`); // Also update related table name for clarity
+        // Create users table with an index
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS \`${TEST_TABLE}\`
+            (
+                id         INT AUTO_INCREMENT PRIMARY KEY,
+                name       VARCHAR(100) NOT NULL COMMENT 'User full name',
+                email      VARCHAR(100) NOT NULL COMMENT 'User email address',
+                age        INT COMMENT 'User age',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY \`idx_email\` (email) COMMENT 'Ensure email is unique'
+            ) COMMENT ='Stores test user information';
+        `);
+        console.log(`   - Table '${TEST_TABLE}' created with index.`);
+
+        // Create orders table with a foreign key
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS test_orders
+            (
+                order_id     INT AUTO_INCREMENT PRIMARY KEY,
+                user_id      INT,
+                product_name VARCHAR(100),
+                order_date   DATE,
+                CONSTRAINT fk_user_order FOREIGN KEY (user_id) REFERENCES \`${TEST_TABLE}\` (id) ON DELETE SET NULL
+            ) COMMENT ='Stores test user orders';
+        `);
+        console.log(`   - Table 'test_orders' created with foreign key.`); // Also update related table name for clarity
+    } finally {
+        if (conn) conn.release(); // Release the connection
+    }
 }
 
 /**
  * Insert sample data
  */
 async function insertSampleData() {
-    await pool.query(`USE ${TEST_DB}`);
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await conn.query(`USE \`${TEST_DB}\``);
 
-    const users = [
-        {name: 'Roberto', email: 'roberto@example.com', age: 53},
-        {name: 'Alerinda', email: 'almerinda@example.com', age: 43},
-        {name: 'Laisa', email: 'laisa@example.com', age: 22},
-        {name: 'Luiza', email: 'luiza@example.com', age: 20},
-        {name: 'Roanna', email: 'roanna@example.com', age: 31},
-    ];
+        const users = [
+            {name: 'Roberto', email: 'roberto@example.com', age: 53},
+            {name: 'Alerinda', email: 'almerinda@example.com', age: 43},
+            {name: 'Laisa', email: 'laisa@example.com', age: 22},
+            {name: 'Luiza', email: 'luiza@example.com', age: 20},
+            {name: 'Roanna', email: 'roanna@example.com', age: 31},
+        ];
 
-    for (const user of users) {
-        await pool.query(
-            `INSERT INTO ${TEST_TABLE} (name, email, age)
-             VALUES (?, ?, ?)`,
-            [user.name, user.email, user.age]
-        );
+        for (const user of users) {
+            await conn.query(
+                `INSERT INTO \`${TEST_TABLE}\` (name, email, age)
+                 VALUES (?, ?, ?)`,
+                [user.name, user.email, user.age]
+            );
+        }
+    } finally {
+        if (conn) conn.release();
     }
 }
 
@@ -222,20 +250,26 @@ async function insertSampleData() {
  * Test various queries
  */
 async function testQueries() {
-    await pool.query(`USE ${TEST_DB}`);
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await conn.query(`USE \`${TEST_DB}\``);
 
-    // Test SELECT
-    const [rows] = await pool.query(`SELECT *
-                                     FROM ${TEST_TABLE}`);
-    console.log(`  - SELECT: Found ${Array.isArray(rows) ? rows.length : 'non-array'} rows`);
+        // Test SELECT
+        const [rows] = await conn.query(`SELECT *
+                                         FROM \`${TEST_TABLE}\``);
+        console.log(`  - SELECT: Found ${Array.isArray(rows) ? rows.length : 'non-array'} rows`);
 
-    // Test SHOW TABLES
-    const [tables] = await pool.query('SHOW TABLES');
-    console.log(`  - SHOW TABLES: Found ${Array.isArray(tables) ? tables.length : 'non-array'} tables`);
+        // Test SHOW TABLES
+        const [tables] = await conn.query('SHOW TABLES');
+        console.log(`  - SHOW TABLES: Found ${Array.isArray(tables) ? tables.length : 'non-array'} tables`);
 
-    // Test DESCRIBE
-    const [columns] = await pool.query(`DESCRIBE ${TEST_TABLE}`);
-    console.log(`  - DESCRIBE: Found ${Array.isArray(columns) ? columns.length : 'non-array'} columns`);
+        // Test DESCRIBE
+        const [columns] = await conn.query(`DESCRIBE \`${TEST_TABLE}\``);
+        console.log(`  - DESCRIBE: Found ${Array.isArray(columns) ? columns.length : 'non-array'} columns`);
+    } finally {
+        if (conn) conn.release();
+    }
 }
 
 // Run the main function

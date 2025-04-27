@@ -13,7 +13,6 @@ const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_ROW_LIMIT = 1000;
 
 let pool: mariadb.Pool | null = null;
-let connection: mariadb.PoolConnection | null = null;
 
 /**
  * Create a MariaDB connection pool
@@ -57,14 +56,12 @@ export async function executeQuery(
     console.error("[Setup] Connection pool not found, creating a new one");
     pool = createConnectionPool();
   }
+  let conn: mariadb.PoolConnection | null = null;
   try {
     // Get connection from pool
-    if (connection) {
-      console.error("[Query] Reusing existing connection");
-    } else {
-      console.error("[Query] Creating new connection");
-      connection = await pool.getConnection();
-    }
+    console.error("[Query] Acquiring new connection from pool...");
+    conn = await pool.getConnection();
+    console.error("[Query] Connection acquired successfully");
 
     // Use specific database if provided
     if (database) {
@@ -90,7 +87,7 @@ export async function executeQuery(
       Object.assign(queryOptions, params);
     }
 
-    const [rows, fields] = await connection.query(queryOptions);
+    const [rows, fields] = await conn.query(queryOptions);
 
     // Process rows to convert Buffer objects to hex strings
     let processedRows;
@@ -123,17 +120,21 @@ export async function executeQuery(
 
     return { rows: limitedRows, fields };
   } catch (error) {
+    // Log before releasing in catch
+    console.error("[Query] Error occurred. Attempting connection.release() in CATCH block..."); // <-- Add log
     if (connection) {
       connection.release();
-      console.error("[Query] Connection released with error");
+      console.error("[Query] Connection released in CATCH block."); // <-- Add log
     }
     console.error("[Error] Query execution failed:", error);
     throw error;
   } finally {
     // Release connection back to pool
+    // Log before releasing in finally
+    console.error("[Query] Attempting connection.release() in FINALLY block..."); // <-- Add log
     if (connection) {
       connection.release();
-      console.error("[Query] Connection released");
+      console.error("[Query] Connection released in FINALLY block."); // <-- Add log
     }
   }
 }
