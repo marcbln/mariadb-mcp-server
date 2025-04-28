@@ -16,9 +16,8 @@
     "inspector": "npx @modelcontextprotocol/inspector dist/index.js",
     "test:setup": "node test-setup.js",
     "test:tools": "node test-tools.js",
-    "test": "npm run test:setup && MARIADB_USER=$MARIADB_USER MARIADB_PASSWORD=$MARIADB_PASSWORD MARIADB_DATABASE=$MARIADB_DATABASE MARIADB_HOST=$MARIADB_HOST MARIADB_PORT=$MARIADB_PORT MARIADB_ALLOW_INSERT=$MARIADB_ALLOW_INSERT MARIADB_ALLOW_UPDATE=$MARIADB_ALLOW_UPDATE MARIADB_ALLOW_DELETE=$MARIADB_ALLOW_DELETE node test-tools.js",
-    "test:db": "ts-node test/dbService.test.ts"
- },
+    "test:db": "MARIADB_USER=root MARIADB_PASSWORD=11111 MARIADB_HOST=127.0.0.1 MARIADB_PORT=10236 npx --node-arg=--experimental-vm-modules jest test/dbService.test.ts"
+  },
   "keywords": [
     "mcp",
     "mysql",
@@ -42,6 +41,8 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.16",
     "dotenv": "^16.4.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   }

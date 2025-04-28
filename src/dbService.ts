@@ -16,7 +16,9 @@ export enum SchemaDetailFlag {
  * Maps the user-facing detail_level string to internal SchemaDetailFlags.
  */
 const detailLevelToFlags: Record<string, SchemaDetailFlag[]> = {
-  BASIC: [SchemaDetailFlag.COLUMNS_BASIC],
+  BASIC: [
+      SchemaDetailFlag.COLUMNS_BASIC
+  ],
   STANDARD: [
     SchemaDetailFlag.COLUMNS_BASIC,
     SchemaDetailFlag.FOREIGN_KEYS,

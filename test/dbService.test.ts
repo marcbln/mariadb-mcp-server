@@ -1,5 +1,5 @@
-import { analyzeTables, fetchBasicColumnDetails, fetchFullColumnDetails, fetchForeignKeyDetails, fetchBasicIndexDetails, fetchFullIndexDetails } from "../src/dbService";
-import { getConfigFromEnv } from "../src/connection"; // Assuming getConfigFromEnv is needed for database name
+import { analyzeTables, fetchBasicColumnDetails, fetchFullColumnDetails, fetchForeignKeyDetails, fetchBasicIndexDetails, fetchFullIndexDetails } from "../src/dbService.ts";
+import { getConfigFromEnv } from "../src/connection.ts"; // Assuming getConfigFromEnv is needed for database name
 
 // Note: This test suite assumes that the test database and tables have been set up
 // by running the test-setup.js script (e.g., via `npm run test:setup`) before running these tests.
