@@ -66,7 +66,7 @@ export async function executeQuery(
     // Use specific database if provided
     if (database) {
       console.error(`[Query] Using database: ${database}`);
-      await connection.query(`USE \`${database}\``);
+      await conn.query(`USE \`${database}\``);
     }
     if (!isAlloowedQuery(sql)) {
       throw new Error("Query not allowed");
@@ -87,7 +87,9 @@ export async function executeQuery(
       Object.assign(queryOptions, params);
     }
 
+    console.error(`[Query] Executing conn.query for SQL: ${sql.substring(0, 100)}...`); // <-- Add log before query
     const [rows, fields] = await conn.query(queryOptions);
+    console.error(`[Query] Finished conn.query for SQL: ${sql.substring(0, 100)}...`); // <-- Add log after query
 
     // Process rows to convert Buffer objects to hex strings
     let processedRows;
@@ -122,8 +124,8 @@ export async function executeQuery(
   } catch (error) {
     // Log before releasing in catch
     console.error("[Query] Error occurred. Attempting connection.release() in CATCH block..."); // <-- Add log
-    if (connection) {
-      connection.release();
+    if (conn) {
+      conn.release();
       console.error("[Query] Connection released in CATCH block."); // <-- Add log
     }
     console.error("[Error] Query execution failed:", error);
@@ -132,8 +134,8 @@ export async function executeQuery(
     // Release connection back to pool
     // Log before releasing in finally
     console.error("[Query] Attempting connection.release() in FINALLY block..."); // <-- Add log
-    if (connection) {
-      connection.release();
+    if (conn) {
+      conn.release();
       console.error("[Query] Connection released in FINALLY block."); // <-- Add log
     }
   }

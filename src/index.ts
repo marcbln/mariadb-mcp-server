@@ -26,7 +26,7 @@ import {
   endConnection,
   getConfigFromEnv,
 } from "./connection.js";
-import { analyzeDatabaseTables } from "./tableAnalysis.js"; // Added import
+import { analyzeTables } from "./dbService.js";
 
 /**
  * Create an MCP server with tools for MariaDB database access
@@ -131,6 +131,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  * Handler for MariaDB database access tools
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // Log the raw incoming request *before* anything else
+  console.error(`[Index Handler] Received tool call request: ${JSON.stringify(request)}`); // <-- Add log
   try {
     createConnectionPool();
   } catch (error) {
@@ -190,8 +192,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
+        // Log arguments just before calling the analysis function
+        console.error(`[Index] Calling analyzeDatabaseTables with: tableNames=${JSON.stringify(tableNames)}, detailLevel=${detailLevel}, database=${database}`); // <-- Add log
+
         // Call the dedicated analysis function
-        const analysisResult = await analyzeDatabaseTables(
+        const analysisResult = await analyzeTables(
           tableNames,
           detailLevel || "STANDARD", // Pass default explicitly if undefined
           database

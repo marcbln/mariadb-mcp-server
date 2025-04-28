@@ -91,29 +91,29 @@ async function main() {
 
     try {
         // Wait for server to start
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Test list_databases
-        console.log('\n1. Testing list_databases tool...');
-        const databases = await callTool(server, 'list_databases', {});
-        console.log('Result:', JSON.stringify(databases, null, 2));
-
-        // Test list_tables
-        console.log('\n2. Testing list_tables tool...');
-        const tables = await callTool(server, 'list_tables', {database: config.database});
-        console.log('Result:', JSON.stringify(tables, null, 2));
-
-        // Test execute_query (Keep this one)
-        console.log('\n4. Testing execute_query tool...');
-        const queryResult = await callTool(server, 'execute_query', {
-            database: config.database,
-            query: `SELECT *
-                    FROM ${table}
-                    LIMIT 3`
-        });
-        console.log('Result:', JSON.stringify(queryResult, null, 2));
-
-        console.log('\nTests completed (more to add)!'); // Placeholder message
+        await new Promise(resolve => setTimeout(resolve, 3000));
+ 
+        // // Test list_databases
+        // console.log('\n1. Testing list_databases tool...');
+        // const databases = await callTool(server, 'list_databases', {});
+        // console.log('Result:', JSON.stringify(databases, null, 2));
+        //
+        // // Test list_tables
+        // console.log('\n2. Testing list_tables tool...');
+        // const tables = await callTool(server, 'list_tables', {database: config.database});
+        // console.log('Result:', JSON.stringify(tables, null, 2));
+        //
+        // // Test execute_query (Keep this one)
+        // console.log('\n4. Testing execute_query tool...');
+        // const queryResult = await callTool(server, 'execute_query', {
+        //     database: config.database,
+        //     query: `SELECT *
+        //             FROM ${table}
+        //             LIMIT 3`
+        // });
+        // console.log('Result:', JSON.stringify(queryResult, null, 2));
+        //
+        // console.log('\nTests completed (more to add)!'); // Placeholder message
     } catch (error) {
         console.error('\n❌ Error:', error.message);
     } finally {
@@ -225,9 +225,11 @@ async function callTool(server, toolName, args) {
 
         // Handle response
         const onData = (data) => {
+            const rawData = data.toString(); // Get raw data
+            console.log(`[callTool Raw Data]:\n--- START ---\n${rawData}\n--- END ---`); // Log raw data
             try {
-                const dataStr = data.toString().trim();
-                console.log(`Received data: ${dataStr}`);
+                const dataStr = rawData.trim();
+                // console.log(`Received data: ${dataStr}`); // Keep original log if needed
 
                 const responses = dataStr.split('\n');
 
