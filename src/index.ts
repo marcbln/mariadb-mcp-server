@@ -20,14 +20,15 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import mariadb from "mariadb"; // Added import
 import {
   createConnectionPool,
   executeQuery,
   endConnection,
   getConfigFromEnv,
+  PoolConnectionDetails, // Added import
 } from "./connection.js";
 import { analyzeTables } from "./dbService.js";
-import { validateQuery } from "./validators.js";
 
 /**
  * Create an MCP server with tools for MariaDB database access
@@ -124,27 +125,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+// Global variable to hold pool details after initialization
+let poolDetails: PoolConnectionDetails | null = null;
+
 /**
  * Handler for MariaDB database access tools
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Log the raw incoming request *before* anything else
-  console.error(`[Index Handler] Received tool call request: ${JSON.stringify(request)}`); // <-- Add log
-    let config;
-    try {
-      config = getConfigFromEnv(); // Get config early to check permissions
-      createConnectionPool(config); // Pass config to potentially initialize pool
-    } catch (error) {
-      console.error("[Fatal] Failed to initialize MariaDB connection:", error);
-      // Consider throwing an McpError here instead of exiting if initialization fails
-      throw new McpError(ErrorCode.InternalError, `Failed to initialize database connection: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  console.error(`[Index Handler] Received tool call request: ${JSON.stringify(request)}`);
+
+  // Ensure pool is initialized before handling tool calls
+  if (!poolDetails) {
+      console.error("[Error] Connection pool not initialized before tool call.");
+      throw new McpError(ErrorCode.InternalError, "Database connection pool is not ready.");
+  }
+  const { pool, allowDml, allowDdl } = poolDetails; // Destructure for use
 
   try {
     switch (request.params.name) {
       case "list_databases": {
         console.error("[Tool] Executing list_databases");
-        const { rows } = await executeQuery("SHOW DATABASES");
+        // Pass pool and permissions to executeQuery
+        const { rows } = await executeQuery(pool, allowDml, allowDdl, "SHOW DATABASES");
         return {
           content: [
             {
@@ -162,7 +165,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           | string
           | undefined;
 
-        const { rows } = await executeQuery("SHOW FULL TABLES", [], database);
+        // Pass pool and permissions to executeQuery
+        const { rows } = await executeQuery(pool, allowDml, allowDdl, "SHOW FULL TABLES", [], database);
 
         return {
           content: [
@@ -224,15 +228,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "Query is required");
         }
 
-    // Validate the query using the configured permissions from the 'config' variable
-    if (!config) {
-         // This should ideally not happen if the above try/catch works
-         throw new McpError(ErrorCode.InternalError, "Server configuration not loaded.");
-    }
-    console.error(`[Tool] Validating query. DML Allowed: ${config.allow_dml}, DDL Allowed: ${config.allow_ddl}`);
-    validateQuery(query, config.allow_dml, config.allow_ddl); // Pass the flags
 
-        const { rows } = await executeQuery(query, [], database);
+        // Pass pool and permissions to executeQuery
+        const { rows } = await executeQuery(pool, allowDml, allowDdl, query, [], database);
 
         return {
           content: [
@@ -275,19 +273,34 @@ async function main() {
   console.error("[Setup] Starting MariaDB MCP server");
 
   try {
+    // Initialize connection pool ONCE before connecting the server
+    console.error("[Setup] Initializing MariaDB connection pool...");
+    const config = getConfigFromEnv();
+    poolDetails = createConnectionPool(config); // Store pool details globally
+    console.error("[Setup] Connection pool initialized.");
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("[Setup] MariaDB MCP server running on stdio");
   } catch (error) {
-    console.error("[Fatal] Failed to start server:", error);
+    console.error("[Fatal] Failed to start server or initialize pool:", error);
+    // Attempt to close pool if it was created before error
+    if (poolDetails?.pool) {
+        await endConnection(poolDetails.pool);
+    }
     process.exit(1);
   }
 }
 
 // Handle process termination
 process.on("SIGINT", async () => {
-  console.error("[Shutdown] Closing MariaDB connection pool");
-  await endConnection();
+  console.error("[Shutdown] Received SIGINT. Closing MariaDB connection pool...");
+  // Pass the specific pool instance to endConnection
+  if (poolDetails?.pool) {
+      await endConnection(poolDetails.pool);
+  } else {
+      console.warn("[Shutdown] Pool was not initialized, nothing to close.");
+  }
   process.exit(0);
 });
 

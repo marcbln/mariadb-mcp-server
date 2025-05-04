@@ -1,8 +1,6 @@
 /**
- * SQL query validators for MariaDB MCP server
- * Ensures that only allowed queries are executed based on configuration.
+ * Service for validating SQL query permissions based on defined rules.
  */
-import { MariaDBConfig } from "./types.js"; // Import config type if needed (though flags are passed directly)
 
 // Command Categories
 const DQL_COMMANDS = [ // Data Query Language (Always Allowed)
@@ -57,6 +55,9 @@ const ALWAYS_DISALLOWED_COMMANDS = [
  * @returns Normalized query string in uppercase.
  */
 function normalizeQuery(query: string): string {
+  if (!query || typeof query !== 'string') {
+    return '';
+  }
   return query
     .replace(/--.*$/gm, "") // Remove single-line comments
     .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
@@ -66,54 +67,57 @@ function normalizeQuery(query: string): string {
 }
 
 /**
- * Validates if a SQL query is allowed based on the configured permissions.
+ * Checks if a SQL query is allowed based on the configured permissions.
+ * Logs the reason for rejection internally.
  * @param query SQL query to validate.
  * @param allowDml Whether DML operations are permitted.
  * @param allowDdl Whether DDL operations are permitted.
  * @returns true if the query is allowed, false otherwise.
  */
-// Corrected name: isAllowedQuery
-export function isAllowedQuery(query: string, allowDml: boolean, allowDdl: boolean): boolean {
+export function checkPermissions(query: string, allowDml: boolean, allowDdl: boolean): boolean {
+console.log(`[PermissionService DEBUG] checkPermissions called with query: "${query}", allowDml: ${allowDml}, allowDdl: ${allowDdl}`);
   const normalizedQuery = normalizeQuery(query);
 
   if (!normalizedQuery) {
-    console.error("[Validator] Query rejected: Empty query.");
+    console.error("[PermissionService] Query rejected: Empty or invalid query.");
+console.log("[PermissionService DEBUG] Returning false due to empty/invalid query.");
     return false;
   }
 
   // Basic check for multiple statements (imperfect but catches simple cases)
   // We disallow semicolons unless it's the very last character.
   if (normalizedQuery.includes(";") && !normalizedQuery.endsWith(";")) {
-     console.error("[Validator] Query rejected: Multiple statements detected (contains ';').");
+     console.error("[PermissionService] Query rejected: Multiple statements detected (contains ';').");
      return false;
   }
 
   // Identify the first command word
   const command = normalizedQuery.split(/[\s;()]+/)[0];
   if (!command) {
-     console.error("[Validator] Query rejected: Could not identify command.");
+     console.error("[PermissionService] Query rejected: Could not identify command.");
      return false; // Should not happen if normalizedQuery is not empty
   }
 
   // 1. Check if the command is *always* disallowed
   if (ALWAYS_DISALLOWED_COMMANDS.includes(command)) {
-    console.error(`[Validator] Query rejected: Command '${command}' is always disallowed.`);
+    console.error(`[PermissionService] Query rejected: Command '${command}' is always disallowed.`);
     return false;
   }
 
   // 2. Check DQL (always allowed)
   if (DQL_COMMANDS.includes(command)) {
-    console.log(`[Validator] Query allowed: DQL command '${command}'.`);
+    // Don't log success here, too noisy. Log only rejections.
+    // console.log(`[PermissionService] Query allowed: DQL command '${command}'.`);
     return true; // Multiple statements already checked
   }
 
   // 3. Check DML (allowed only if allowDml is true)
   if (DML_COMMANDS.includes(command)) {
     if (allowDml) {
-      console.log(`[Validator] Query allowed: DML command '${command}' (DML enabled).`);
+      // console.log(`[PermissionService] Query allowed: DML command '${command}' (DML enabled).`);
       return true; // Multiple statements already checked
     } else {
-      console.error(`[Validator] Query rejected: DML command '${command}' requires MARIADB_ALLOW_DML=true.`);
+      console.error(`[PermissionService] Query rejected: DML command '${command}' requires allowDml=true.`);
       return false;
     }
   }
@@ -121,40 +125,15 @@ export function isAllowedQuery(query: string, allowDml: boolean, allowDdl: boole
   // 4. Check DDL (allowed only if allowDdl is true)
   if (DDL_COMMANDS.includes(command)) {
     if (allowDdl) {
-      console.log(`[Validator] Query allowed: DDL command '${command}' (DDL enabled).`);
+      // console.log(`[PermissionService] Query allowed: DDL command '${command}' (DDL enabled).`);
       return true; // Multiple statements already checked
     } else {
-      console.error(`[Validator] Query rejected: DDL command '${command}' requires MARIADB_ALLOW_DDL=true.`);
+      console.error(`[PermissionService] Query rejected: DDL command '${command}' requires allowDdl=true.`);
       return false;
     }
   }
 
   // 5. If the command is not in any recognized list, deny by default for safety.
-  console.warn(`[Validator] Query rejected: Command '${command}' is not recognized or explicitly allowed.`);
+  console.warn(`[PermissionService] Query rejected: Command '${command}' is not recognized or explicitly allowed.`);
   return false;
-}
-
-/**
- * Validates if a SQL query is safe and permitted to execute.
- * @param query SQL query to validate.
- * @param allowDml Whether DML operations are permitted.
- * @param allowDdl Whether DDL operations are permitted.
- * @throws Error if the query is not valid or not permitted.
- */
-export function validateQuery(query: string, allowDml: boolean, allowDdl: boolean): void {
-  console.error(`[Validator] Validating query (DML:${allowDml}, DDL:${allowDdl}): ${query.substring(0, 100)}...`);
-
-  if (!query || typeof query !== "string") {
-    throw new Error("Query must be a non-empty string");
-  }
-
-  // Pass permissions flags to the check function
-  if (!isAllowedQuery(query, allowDml, allowDdl)) {
-    // The specific reason is logged within isAllowedQuery
-    throw new Error(
-      "Query is not permitted. Check server logs for details (check command type, DML/DDL permissions, multiple statements, or disallowed commands)."
-    );
-  }
-
-  console.error("[Validator] Query validated successfully.");
 }

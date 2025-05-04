@@ -1,43 +1,51 @@
-import { analyzeTables } from "../src/dbService"; // Remove .ts extension for CJS
-import { createConnectionPool, endConnection } from "../src/connection"; // Import pool functions
+import mariadb from "mariadb"; // Added import
+import { analyzeTables } from "../src/dbService";
+import { createConnectionPool, endConnection, PoolConnectionDetails } from "../src/connection"; // Added PoolConnectionDetails
+import { MariaDBConfig } from "../src/types"; // Added import
 
 // Note: This test suite assumes that the test database and tables have been set up
-// by running the test-setup.js script (e.g., via `npm run test:setup`) before running these tests.
+// by running the test-setup.js script before running these tests.
 
 describe("dbService", () => {
   // Hardcoded configuration for testing
-  const testConfig = {
-    host: '127.0.0.1',
-    port: 10236,
-    user: 'root',
-    password: '11111',
+  const testConfig: MariaDBConfig = { // Use MariaDBConfig type
+    host: process.env.MARIADB_HOST || '127.0.0.1',
+    port: parseInt(process.env.MARIADB_PORT || '10236', 10),
+    user: process.env.MARIADB_USER || 'root',
+    password: process.env.MARIADB_PASSWORD || '11111',
     database: 'mariadb_mcp_test_db', // From test-setup.js
-    // Add missing properties required by MariaDBConfig type
-    allow_dml: false,
+    allow_dml: false, // Default permissions for these tests
     allow_ddl: false,
   };
-  const testDbName = testConfig.database;
+  const testDbName = testConfig.database!; // Use non-null assertion
+
+  // Variable to hold pool details for the suite
+  let currentPoolDetails: PoolConnectionDetails | null = null;
 
   beforeAll(() => {
-    // Ensure the hardcoded database name is set
+    // Ensure the database name is set
     if (!testDbName) {
-      throw new Error("Hardcoded test database name is missing.");
+      throw new Error("Test database name is missing in config.");
     }
-    // Create the connection pool specifically for tests using the hardcoded config
-    createConnectionPool(testConfig);
+    // Create the connection pool specifically for this test suite
+    currentPoolDetails = createConnectionPool(testConfig);
   });
 
   afterAll(async () => {
-    // Close the connection pool after tests are done
-    await endConnection();
+    // Close the specific connection pool after tests are done
+    if (currentPoolDetails?.pool) {
+        await endConnection(currentPoolDetails.pool);
+    }
   });
 
   describe("analyzeTables", () => {
     it("should analyze table schema with BASIC detail level", async () => {
+      if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
       const tableNames = ["test_users"];
       const detailLevel = "BASIC";
 
-      const result = await analyzeTables(tableNames, detailLevel, testDbName);
+      // Pass pool details to analyzeTables
+      const result = await analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName);
 
       expect(result).toHaveProperty("test_users");
       expect(result.test_users).toHaveProperty("columns");
@@ -61,7 +69,9 @@ describe("dbService", () => {
       const tableNames = ["test_users", "test_orders"];
       const detailLevel = "STANDARD";
 
-      const result = await analyzeTables(tableNames, detailLevel, testDbName);
+      if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
+      // Pass pool details to analyzeTables
+      const result = await analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName);
 
       expect(result).toHaveProperty("test_users");
       expect(result.test_users).toHaveProperty("columns");
@@ -91,9 +101,11 @@ describe("dbService", () => {
     it("should analyze table schema with FULL detail level", async () => {
         const tableNames = ["test_users", "test_orders"];
         const detailLevel = "FULL";
-
-        const result = await analyzeTables(tableNames, detailLevel, testDbName);
-
+  
+        if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
+        // Pass pool details to analyzeTables
+        const result = await analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName);
+  
         expect(result).toHaveProperty("test_users");
         expect(result.test_users).toHaveProperty("columns");
         expect(Array.isArray(result.test_users.columns)).toBe(true);
@@ -136,9 +148,11 @@ describe("dbService", () => {
     it("should handle invalid table names gracefully", async () => {
         const tableNames = ["test_users", "invalid-table!"];
         const detailLevel = "STANDARD";
-
-        const result = await analyzeTables(tableNames, detailLevel, testDbName);
-
+  
+        if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
+        // Pass pool details to analyzeTables
+        const result = await analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName);
+  
         expect(result).toHaveProperty("test_users");
         expect(result.test_users).not.toHaveProperty("error"); // Valid table should not have an error
         expect(result).toHaveProperty("invalid-table!");
@@ -149,8 +163,10 @@ describe("dbService", () => {
      it("should throw error for empty tableNames array", async () => {
         const tableNames: string[] = [];
         const detailLevel = "STANDARD";
-
-        await expect(analyzeTables(tableNames, detailLevel, testDbName)).rejects.toThrow(
+  
+        if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
+        // Pass pool details to analyzeTables
+        await expect(analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName)).rejects.toThrow(
             "table_names array cannot be empty"
         );
     });
@@ -169,7 +185,9 @@ describe("dbService", () => {
         // NOTE: With hardcoded test config, we can't easily test the *real* default mechanism
         // which relies on environment variables via getConfigFromEnv.
         // Instead, we pass the testDbName explicitly here to ensure the function works.
-        const result = await analyzeTables(tableNames, detailLevel, testDbName);
+        if (!currentPoolDetails) throw new Error("Pool not initialized"); // Type guard
+        // Pass pool details to analyzeTables
+        const result = await analyzeTables(currentPoolDetails, tableNames, detailLevel, testDbName);
 
         expect(result).toHaveProperty("test_users");
         expect(result.test_users).toHaveProperty("columns");

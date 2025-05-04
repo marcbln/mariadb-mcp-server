@@ -1,4 +1,5 @@
-import { executeQuery, getConfigFromEnv } from "./connection.js";
+import mariadb from "mariadb"; // Added import
+import { executeQuery, getConfigFromEnv, PoolConnectionDetails } from "./connection.js"; // Added PoolConnectionDetails
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -40,7 +41,8 @@ const detailLevelToFlags: Record<string, SchemaDetailFlag[]> = {
  * @returns A promise resolving to an object where keys are table names and values
  *          are the analysis results for that table.
  */
-export async function analyzeTables( // Renamed from analyzeDatabaseTables
+export async function analyzeTables(
+  poolDetails: PoolConnectionDetails, // Added poolDetails argument
   tableNames: string[],
   detailLevel: string,
   database?: string
@@ -87,27 +89,27 @@ export async function analyzeTables( // Renamed from analyzeDatabaseTables
 
       // COLUMNS_FULL implies COLUMNS_BASIC, so check full first
       if (flags.includes(SchemaDetailFlag.COLUMNS_FULL)) {
-        // TODO: Implement SQL query for full column details
-        tableResult.columns = await fetchFullColumnDetails(dbName, tableName);
+        // Pass poolDetails down
+        tableResult.columns = await fetchFullColumnDetails(poolDetails, dbName, tableName);
       } else if (flags.includes(SchemaDetailFlag.COLUMNS_BASIC)) {
-        // TODO: Implement SQL query for basic column details
+        // Pass poolDetails down
         console.error(`[Analyze] Calling fetchBasicColumnDetails for ${dbName}.${tableName}`);
-        tableResult.columns = await fetchBasicColumnDetails(dbName, tableName);
+        tableResult.columns = await fetchBasicColumnDetails(poolDetails, dbName, tableName);
         console.error(`[Analyze] Returned from fetchBasicColumnDetails for ${dbName}.${tableName}`);
       }
 
       if (flags.includes(SchemaDetailFlag.FOREIGN_KEYS)) {
-        // TODO: Implement SQL query for foreign key details
-        tableResult.foreign_keys = await fetchForeignKeyDetails(dbName, tableName);
+        // Pass poolDetails down
+        tableResult.foreign_keys = await fetchForeignKeyDetails(poolDetails, dbName, tableName);
       }
 
       // INDEXES_FULL implies INDEXES_BASIC
       if (flags.includes(SchemaDetailFlag.INDEXES_FULL)) {
-        // TODO: Implement SQL query/command for full index details
-        tableResult.indexes = await fetchFullIndexDetails(dbName, tableName);
+        // Pass poolDetails down
+        tableResult.indexes = await fetchFullIndexDetails(poolDetails, dbName, tableName);
       } else if (flags.includes(SchemaDetailFlag.INDEXES_BASIC)) {
-        // TODO: Implement SQL query/command for basic index details
-        tableResult.indexes = await fetchBasicIndexDetails(dbName, tableName);
+        // Pass poolDetails down
+        tableResult.indexes = await fetchBasicIndexDetails(poolDetails, dbName, tableName);
       }
 
       results[tableName] = tableResult;
@@ -129,7 +131,11 @@ export async function analyzeTables( // Renamed from analyzeDatabaseTables
 // --- Placeholder functions for fetching details ---
 // These will be implemented with actual SQL queries
 
-export async function fetchBasicColumnDetails(dbName: string, tableName: string): Promise<any[]> {
+export async function fetchBasicColumnDetails(
+    poolDetails: PoolConnectionDetails, // Added poolDetails
+    dbName: string,
+    tableName: string
+): Promise<any[]> {
   console.log(`[Stub] Fetching basic columns for ${dbName}.${tableName}`);
   // Placeholder SQL using INFORMATION_SCHEMA.COLUMNS
   const sql = `
@@ -144,12 +150,18 @@ export async function fetchBasicColumnDetails(dbName: string, tableName: string)
         ORDINAL_POSITION;
   `;
   console.error(`[fetchBasicColumnDetails] Executing query for ${dbName}.${tableName}`);
-  const { rows } = await executeQuery(sql, { dbName, tableName }, undefined);
+  // Use new executeQuery signature
+  const { pool, allowDml, allowDdl } = poolDetails;
+  const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
   console.error(`[fetchBasicColumnDetails] Query finished for ${dbName}.${tableName}`);
   return rows;
 }
 
-export async function fetchFullColumnDetails(dbName: string, tableName: string): Promise<any[]> {
+export async function fetchFullColumnDetails(
+    poolDetails: PoolConnectionDetails, // Added poolDetails
+    dbName: string,
+    tableName: string
+): Promise<any[]> {
   console.log(`[Stub] Fetching full columns for ${dbName}.${tableName}`);
    // Placeholder SQL using INFORMATION_SCHEMA.COLUMNS - similar to old describe_table
    const sql = `
@@ -170,11 +182,17 @@ export async function fetchFullColumnDetails(dbName: string, tableName: string):
    ORDER BY
        ORDINAL_POSITION;
  `;
- const { rows } = await executeQuery(sql, { dbName, tableName }, undefined);
+ // Use new executeQuery signature
+ const { pool, allowDml, allowDdl } = poolDetails;
+ const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
  return rows;
 }
 
-export async function fetchForeignKeyDetails(dbName: string, tableName: string): Promise<any[]> {
+export async function fetchForeignKeyDetails(
+    poolDetails: PoolConnectionDetails, // Added poolDetails
+    dbName: string,
+    tableName: string
+): Promise<any[]> {
   console.log(`[Stub] Fetching foreign keys for ${dbName}.${tableName}`);
   // Placeholder SQL using INFORMATION_SCHEMA.KEY_COLUMN_USAGE and REFERENTIAL_CONSTRAINTS
   const sql = `
@@ -196,11 +214,17 @@ export async function fetchForeignKeyDetails(dbName: string, tableName: string):
         AND kcu.TABLE_NAME = :tableName
         AND kcu.REFERENCED_TABLE_NAME IS NOT NULL;
   `;
-  const { rows } = await executeQuery(sql, { dbName, tableName }, undefined);
+  // Use new executeQuery signature
+  const { pool, allowDml, allowDdl } = poolDetails;
+  const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
   return rows;
 }
 
-export async function fetchBasicIndexDetails(dbName: string, tableName: string): Promise<any[]> {
+export async function fetchBasicIndexDetails(
+    poolDetails: PoolConnectionDetails, // Added poolDetails
+    dbName: string,
+    tableName: string
+): Promise<any[]> {
   console.log(`[Stub] Fetching basic indexes for ${dbName}.${tableName}`);
   // Placeholder using SHOW INDEX - needs careful handling as it doesn't use placeholders well
   // Alternative: Query INFORMATION_SCHEMA.STATISTICS and group by index name
@@ -213,17 +237,25 @@ export async function fetchBasicIndexDetails(dbName: string, tableName: string):
        TABLE_SCHEMA = :dbName
        AND TABLE_NAME = :tableName;
  `;
- const { rows } = await executeQuery(sql, { dbName, tableName }, undefined);
+ // Use new executeQuery signature
+ const { pool, allowDml, allowDdl } = poolDetails;
+ const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
  return rows;
 }
 
-export async function fetchFullIndexDetails(dbName: string, tableName: string): Promise<any[]> {
+export async function fetchFullIndexDetails(
+    poolDetails: PoolConnectionDetails, // Added poolDetails
+    dbName: string,
+    tableName: string
+): Promise<any[]> {
   console.log(`[Stub] Fetching full indexes for ${dbName}.${tableName}`);
   // Placeholder using SHOW INDEX FROM \`table\` - requires db context
   // IMPORTANT: SHOW INDEX doesn't typically support placeholders for table name.
   // Relying on prior validation of tableName.
   const sql = `SHOW INDEX FROM \`${tableName}\``;
   // Pass dbName as the third argument to set the database context for the connection
-  const { rows } = await executeQuery(sql, [], dbName);
+  // Use new executeQuery signature
+  const { pool, allowDml, allowDdl } = poolDetails;
+  const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, [], dbName);
   return rows;
 }
