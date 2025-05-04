@@ -84,9 +84,14 @@ console.log("[PermissionService DEBUG] Returning false due to empty/invalid quer
     return false;
   }
 
-  // Basic check for multiple statements (imperfect but catches simple cases)
-  // We disallow semicolons unless it's the very last character.
-  if (normalizedQuery.includes(";") && !normalizedQuery.endsWith(";")) {
+  // Check for multiple statements more robustly.
+  // Trim potential trailing semicolon first.
+  const trimmedQuery = normalizedQuery.endsWith(';')
+    ? normalizedQuery.slice(0, -1)
+    : normalizedQuery;
+
+  // If there's still a semicolon after trimming the potential last one, reject.
+  if (trimmedQuery.includes(";")) {
      console.error("[PermissionService] Query rejected: Multiple statements detected (contains ';').");
      return false;
   }
