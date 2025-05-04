@@ -2,7 +2,6 @@
   "name": "mariadb-mcp-server",
   "version": "0.0.1",
   "description": "An MCP server that provides access to MariaDB ou MySQL databases.",
-  "type": "module",
   "bin": {
     "mysql-mcp-server": "dist/index.js"
   },
@@ -16,7 +15,7 @@
     "inspector": "npx @modelcontextprotocol/inspector dist/index.js",
     "test:setup": "node test-setup.js",
     "test:tools": "node test-tools.js",
-    "test:db": "MARIADB_USER=root MARIADB_PASSWORD=11111 MARIADB_HOST=127.0.0.1 MARIADB_PORT=10236 npx --node-arg=--experimental-vm-modules jest test/dbService.test.ts"
+    "test:db": "npm run test:setup && npx jest test/dbService.test.ts"
   },
   "keywords": [
     "mcp",

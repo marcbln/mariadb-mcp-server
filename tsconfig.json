@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "allowImportingTsExtensions": true,
+    // "allowImportingTsExtensions": true, // Removed as it's not compatible with CJS emit
     "isolatedModules": true
   },
   "include": ["src/**/*", "test/**/*"],

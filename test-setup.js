@@ -32,7 +32,7 @@ const TEST_TABLE = 'test_users';
 // Configuration from environment variables
 const config = {
     host:        process.env.MARIADB_HOST || 'localhost',
-    port:        parseInt(process.env.MARIADB_PORT || '10136', 10),
+    port:        parseInt(process.env.MARIADB_PORT || '10236', 10),
     user:        process.env.MARIADB_USER || 'root',
     password:    process.env.MARIADB_PASSWORD || '11111',
     database:    TEST_DB,

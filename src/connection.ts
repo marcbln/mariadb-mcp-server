@@ -17,28 +17,37 @@ let pool: mariadb.Pool | null = null;
 /**
  * Create a MariaDB connection pool
  */
-export function createConnectionPool(): mariadb.Pool {
-  console.error("[Setup] Creating MariaDB connection pool");
-  const config = getConfigFromEnv();
+export function createConnectionPool(config?: MariaDBConfig): mariadb.Pool {
+  console.error("[Setup] Creating/Retrieving MariaDB connection pool");
+
+  // If a pool already exists, return it
   if (pool) {
-    console.error("[Setup] Connection pool already exists");
+    console.error("[Setup] Connection pool already exists, returning existing pool.");
     return pool;
   }
+
+  // Determine configuration: use provided config or get from environment
+  const poolConfig = config || getConfigFromEnv();
+  console.error(`[Setup] Using configuration: ${config ? 'provided' : 'from environment'}`);
+
   try {
+    console.error("[Setup] Creating new connection pool instance.");
     pool = mariadb.createPool({
-      host: config.host,
-      port: config.port,
-      user: config.user,
-      password: config.password,
-      database: config.database,
-      bigIntAsNumber: true, // Add this line to convert BIGINT to Numbers
+      host: poolConfig.host,
+      port: poolConfig.port,
+      user: poolConfig.user,
+      password: poolConfig.password,
+      database: poolConfig.database, // Use database from config
+      bigIntAsNumber: true,
       connectionLimit: 2,
       connectTimeout: DEFAULT_TIMEOUT,
     });
+    console.error("[Setup] New connection pool created successfully.");
   } catch (error) {
     console.error("[Error] Failed to create connection pool:", error);
-    throw error;
+    throw error; // Re-throw the error after logging
   }
+
   return pool;
 }
 
@@ -54,7 +63,9 @@ export async function executeQuery(
   // Create connection pool if not already created
   if (!pool) {
     console.error("[Setup] Connection pool not found, creating a new one");
-    pool = createConnectionPool();
+    // If the pool doesn't exist here, it means it wasn't initialized externally (e.g., by tests)
+    // So, create it using environment variables as the default behavior for the main application.
+    pool = createConnectionPool(); // Calls the modified function without args, using env vars
   }
   let conn: mariadb.PoolConnection | null = null;
   try {

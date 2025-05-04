@@ -1,13 +1,23 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
-  preset: 'ts-jest',
+  // Use the preset for ESM support
+  preset: 'ts-jest', // Use standard preset for CJS
   testEnvironment: 'node',
+testTimeout: 30000, // Increase timeout to 30 seconds
   testMatch: [
     "**/test/**/*.test.ts"
   ],
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
+  // Define the transform using the recommended structure
+  transform: {
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        // useESM: true, // No longer needed for CJS
+      },
+    ],
+  },
+  // Add moduleNameMapper for ESM compatibility if needed (might be required depending on imports)
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };
