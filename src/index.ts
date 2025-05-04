@@ -27,6 +27,7 @@ import {
   getConfigFromEnv,
 } from "./connection.js";
 import { analyzeTables } from "./dbService.js";
+import { validateQuery } from "./validators.js";
 
 /**
  * Create an MCP server with tools for MariaDB database access
@@ -108,11 +109,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: `SQL query (only SELECT, ${
-                process.env.MARIADB_ALLOW_INSERT ? "INSERT," : ""
-              } ${process.env.MARIADB_ALLOW_UPDATE ? "UPDATE," : ""} ${
-                process.env.MARIADB_ALLOW_DELETE ? "DELETE," : ""
-              } SHOW, DESCRIBE, and EXPLAIN statements are allowed)`,
+              description: `SQL query to execute. SELECT, SHOW, DESCRIBE, EXPLAIN are always allowed. DML (INSERT, UPDATE, DELETE, REPLACE) requires MARIADB_ALLOW_DML=true. DDL (CREATE, ALTER, DROP, TRUNCATE) requires MARIADB_ALLOW_DDL=true. Other commands (GRANT, SET, etc.) and multiple statements are disallowed.`,
             },
             database: {
               type: "string",
@@ -133,12 +130,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Log the raw incoming request *before* anything else
   console.error(`[Index Handler] Received tool call request: ${JSON.stringify(request)}`); // <-- Add log
-  try {
-    createConnectionPool();
-  } catch (error) {
-    console.error("[Fatal] Failed to initialize MariaDB connection:", error);
-    process.exit(1);
-  }
+    let config;
+    try {
+      config = getConfigFromEnv(); // Get config early to check permissions
+      createConnectionPool(config); // Pass config to potentially initialize pool
+    } catch (error) {
+      console.error("[Fatal] Failed to initialize MariaDB connection:", error);
+      // Consider throwing an McpError here instead of exiting if initialization fails
+      throw new McpError(ErrorCode.InternalError, `Failed to initialize database connection: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
   try {
     switch (request.params.name) {
@@ -223,6 +223,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!query) {
           throw new McpError(ErrorCode.InvalidParams, "Query is required");
         }
+
+    // Validate the query using the configured permissions from the 'config' variable
+    if (!config) {
+         // This should ideally not happen if the above try/catch works
+         throw new McpError(ErrorCode.InternalError, "Server configuration not loaded.");
+    }
+    console.error(`[Tool] Validating query. DML Allowed: ${config.allow_dml}, DDL Allowed: ${config.allow_ddl}`);
+    validateQuery(query, config.allow_dml, config.allow_ddl); // Pass the flags
 
         const { rows } = await executeQuery(query, [], database);
 

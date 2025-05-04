@@ -43,9 +43,8 @@ The server requires the following environment variables:
 - MARIADB_USER: Database username
 - MARIADB_PASSWORD: Database password
 - MARIADB_DATABASE: Default database name (optional)
-- MARIADB_ALLOW_INSERT: false
-- MARIADB_ALLOW_UPDATE: false
-- MARIADB_ALLOW_DELETE: false
+- MARIADB_ALLOW_DML: `false` (Set to `true` to allow INSERT, UPDATE, DELETE, REPLACE queries via `execute_query`)
+- MARIADB_ALLOW_DDL: `false` (Set to `true` to allow CREATE, ALTER, DROP, TRUNCATE queries via `execute_query`)
 - MARIADB_TIMEOUT_MS: 10000
 - MARIADB_ROW_LIMIT: 1000
 
@@ -66,9 +65,8 @@ If you installed via npm (Option 1):
         "MARIADB_USER": "your-user",
         "MARIADB_PASSWORD": "your-password",
         "MARIADB_DATABASE": "your-database",
-        "MARIADB_ALLOW_INSERT": "false",
-        "MARIADB_ALLOW_UPDATE": "false",
-        "MARIADB_ALLOW_DELETE": "false",
+        "MARIADB_ALLOW_DML": "false",
+        "MARIADB_ALLOW_DDL": "false"
         "MARIADB_TIMEOUT_MS": "10000",
         "MARIADB_ROW_LIMIT": "1000",
       },
@@ -92,9 +90,8 @@ If you built from source (Option 2):
         "MARIADB_USER": "your-user",
         "MARIADB_PASSWORD": "your-password",
         "MARIADB_DATABASE": "your-default-database",
-        "MARIADB_ALLOW_INSERT": "false",
-        "MARIADB_ALLOW_UPDATE": "false",
-        "MARIADB_ALLOW_DELETE": "false",
+        "MARIADB_ALLOW_DML": "false",
+        "MARIADB_ALLOW_DDL": "false"
         "MARIADB_TIMEOUT_MS": "10000",
         "MARIADB_ROW_LIMIT": "1000",
       },
@@ -184,6 +181,8 @@ Executes a SQL query.
 - `query` (required): SQL query
 - `database` (optional): Database name (uses default if not specified)
 
+- **Permissions**: DML (INSERT, UPDATE, DELETE, REPLACE) requires `MARIADB_ALLOW_DML=true`. DDL (CREATE, ALTER, DROP, TRUNCATE) requires `MARIADB_ALLOW_DDL=true`. SELECT, SHOW, DESCRIBE, EXPLAIN are always allowed. Other commands (GRANT, SET, etc.) and multiple statements are disallowed.
+
 **Example**:
 ```json
 {
@@ -213,9 +212,8 @@ export MARIADB_HOST=localhost
 export MARIADB_PORT=3306
 export MARIADB_USER=your_username
 export MARIADB_PASSWORD=your_password
-export MARIADB_ALLOW_INSERT: false
-export MARIADB_ALLOW_UPDATE: false
-export MARIADB_ALLOW_DELETE: false
+export MARIADB_ALLOW_DML=false
+export MARIADB_ALLOW_DDL=false
 export MARIADB_TIMEOUT_MS=10000
 export MARIADB_ROW_LIMIT=1000
 
@@ -235,9 +233,8 @@ MARIADB_PORT=3306
 MARIADB_USER=your_username
 MARIADB_PASSWORD=your_password
 MARIADB_DATABASE=mcp_test_db
-MARIADB_ALLOW_INSERT=false
-MARIADB_ALLOW_UPDATE=false
-MARIADB_ALLOW_DELETE=false
+MARIADB_ALLOW_DML=false
+MARIADB_ALLOW_DDL=false
 MARIADB_TIMEOUT_MS=10000
 MARIADB_ROW_LIMIT=1000
 MARIADB_DEBUG_SQL=true
@@ -247,9 +244,8 @@ export MARIADB_PORT=3306
 export MARIADB_USER=your_username
 export MARIADB_PASSWORD=your_password
 export MARIADB_DATABASE=mcp_test_db
-export MARIADB_ALLOW_INSERT: false
-export MARIADB_ALLOW_UPDATE: false
-export MARIADB_ALLOW_DELETE: false
+export MARIADB_ALLOW_DML=false
+export MARIADB_ALLOW_DDL=false
 export MARIADB_TIMEOUT_MS=10000
 export MARIADB_ROW_LIMIT=1000
 
@@ -267,9 +263,8 @@ export MARIADB_HOST=localhost
 export MARIADB_PORT=3306
 export MARIADB_USER=your_username
 export MARIADB_PASSWORD=your_password
-export MARIADB_ALLOW_INSERT: false
-export MARIADB_ALLOW_UPDATE: false
-export MARIADB_ALLOW_DELETE: false
+export MARIADB_ALLOW_DML=false
+export MARIADB_ALLOW_DDL=false
 export MARIADB_TIMEOUT_MS=10000
 export MARIADB_ROW_LIMIT=1000
 

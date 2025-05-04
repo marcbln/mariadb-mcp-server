@@ -9,9 +9,8 @@
         "MARIADB_USER": "your-user",
         "MARIADB_PASSWORD": "your-password",
         "MARIADB_DATABASE": "your-default-database",
-        "MARIADB_ALLOW_INSERT": "false",
-        "MARIADB_ALLOW_UPDATE": "false",
-        "MARIADB_ALLOW_DELETE": "false"
+        "MARIADB_ALLOW_DML": "false",
+        "MARIADB_ALLOW_DDL": "false"
       },
       "disabled": false,
       "autoApprove": []

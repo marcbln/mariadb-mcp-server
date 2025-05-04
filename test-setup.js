@@ -36,9 +36,8 @@ const config = {
     user:        process.env.MARIADB_USER || 'root',
     password:    process.env.MARIADB_PASSWORD || '11111',
     database:    TEST_DB,
-    allowInsert: process.env.MARIADB_ALLOW_INSERT !== 'false',
-    allowUpdate: process.env.MARIADB_ALLOW_UPDATE !== 'false',
-    allowDelete: process.env.MARIADB_ALLOW_DELETE !== 'false',
+    allowDml:    process.env.MARIADB_ALLOW_DML === 'true',
+    allowDdl:    process.env.MARIADB_ALLOW_DDL === 'true',
 };
 
 
@@ -69,7 +68,7 @@ async function main() {
     console.log(`Host: ${config.host}:${config.port}`);
     console.log(`User: ${config.user}`);
     console.log(`Database: ${config.database || 'N/A'}`);
-    console.log(`Allow Insert: ${config.allowInsert}`);
+    console.log(`Allow DML: ${config.allowDml}`);
 // Ensure the database exists before testing the pool with it implicitly
         console.log(`Ensuring database '${TEST_DB}' exists...`);
         let conn;
@@ -81,8 +80,8 @@ async function main() {
             if (conn) conn.release();
         }
         console.log();
-    console.log(`Allow Update: ${config.allowUpdate}`);
-    console.log(`Allow Delete: ${config.allowDelete}`);
+    console.log(`Allow DDL: ${config.allowDdl}`);
+    // Removed Allow Delete logging as it's covered by Allow DML
     console.log();
 
     try {
@@ -136,9 +135,8 @@ async function main() {
                         MARIADB_USER:         config.user,
                         MARIADB_PASSWORD:     config.password,
                         MARIADB_DATABASE:     TEST_DB,
-                        MARIADB_ALLOW_INSERT: String(config.allowInsert),
-                        MARIADB_ALLOW_UPDATE: String(config.allowUpdate),
-                        MARIADB_ALLOW_DELETE: String(config.allowDelete),
+                        MARIADB_ALLOW_DML:    String(config.allowDml),
+                        MARIADB_ALLOW_DDL:    String(config.allowDdl),
                     },
                     disabled:    false,
                     autoApprove: [],

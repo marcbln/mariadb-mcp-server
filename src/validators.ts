@@ -1,107 +1,160 @@
 /**
  * SQL query validators for MariaDB MCP server
- * Ensures that only read-only queries are allowed
+ * Ensures that only allowed queries are executed based on configuration.
  */
+import { MariaDBConfig } from "./types.js"; // Import config type if needed (though flags are passed directly)
 
-// List of allowed SQL commands
-const ALLOWED_COMMANDS = [
+// Command Categories
+const DQL_COMMANDS = [ // Data Query Language (Always Allowed)
   "SELECT",
   "SHOW",
   "DESCRIBE",
   "DESC",
   "EXPLAIN",
+];
+
+const DML_COMMANDS = [ // Data Manipulation Language (Conditional)
   "INSERT",
   "UPDATE",
   "DELETE",
+  "REPLACE",
+  // Consider adding MERGE if applicable/needed
 ];
 
-// List of disallowed SQL commands (write operations)
-const DISALLOWED_COMMANDS = [
-  "DROP",
+const DDL_COMMANDS = [ // Data Definition Language (Conditional)
   "CREATE",
   "ALTER",
+  "DROP",
   "TRUNCATE",
   "RENAME",
-  "REPLACE",
+  // Consider adding other DDL like COMMENT ON if needed
+];
+
+// List of always disallowed SQL commands (for security/stability)
+const ALWAYS_DISALLOWED_COMMANDS = [
   "GRANT",
   "REVOKE",
-  "LOCK",
-  "UNLOCK",
-  "CALL",
-  "EXEC",
+  "SET", // Can change session variables, potentially unsafe
+  "LOCK", // LOCK TABLES can cause deadlocks
+  "UNLOCK", // UNLOCK TABLES
+  "CALL", // Stored procedures might do anything
+  "EXEC", // Synonyms for potentially unsafe operations
   "EXECUTE",
-  "SET",
-  "START",
+  "PREPARE", // Prepared statements handled differently
+  "DEALLOCATE",
+  "START", // Transaction control handled elsewhere if needed
   "BEGIN",
   "COMMIT",
   "ROLLBACK",
+  "SAVEPOINT",
+  "USE", // Database context should be passed explicitly to executeQuery
+  // Add others as needed, e.g., LOAD DATA INFILE
 ];
 
 /**
- * Validates if a SQL query is read-only
- * @param query SQL query to validate
- * @returns true if the query is read-only, false otherwise
+ * Normalizes a SQL query by removing comments and reducing whitespace.
+ * @param query SQL query string.
+ * @returns Normalized query string in uppercase.
  */
-export function isAlloowedQuery(query: string): boolean {
-  // Normalize query by removing comments and extra whitespace
-  const normalizedQuery = query
+function normalizeQuery(query: string): string {
+  return query
     .replace(/--.*$/gm, "") // Remove single-line comments
     .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
     .replace(/\s+/g, " ") // Normalize whitespace
     .trim()
     .toUpperCase();
-  const ALLOW_INSERT = process.env.MARIADB_ALLOW_INSERT === "true";
-  const ALLOW_UPDATE = process.env.MARIADB_ALLOW_UPDATE === "true";
-  const ALLOW_DELETE = process.env.MARIADB_ALLOW_DELETE === "true";
-
-  // Check if query starts with an allowed command
-  const startsWithAllowed = ALLOWED_COMMANDS.some(
-    (cmd) => normalizedQuery.startsWith(cmd + " ") || normalizedQuery === cmd
-  );
-  const startsWithAllowedNoSpace =
-    normalizedQuery.startsWith("INSERT") && !ALLOW_INSERT;
-  // Check if query contains any disallowed commands
-  const containsDisallowed = DISALLOWED_COMMANDS.some((cmd) => {
-    if (cmd === "INSERT" && !ALLOW_INSERT) {
-      return false; // Skip INSERT if not allowed
-    }
-    if (cmd === "UPDATE" && !ALLOW_UPDATE) {
-      return false; // Skip UPDATE if not allowed
-    }
-    if (cmd === "DELETE" && !ALLOW_DELETE) {
-      return false; // Skip DELETE if not allowed
-    }
-    const regex = new RegExp(`(^|\\s)${cmd}(\\s|$)`);
-    return regex.test(normalizedQuery);
-  });
-
-  // Check for multiple statements (;)
-  const hasMultipleStatements =
-    normalizedQuery.includes(";") && !normalizedQuery.endsWith(";");
-
-  // Query is read-only if it starts with an allowed command,
-  // doesn't contain any disallowed commands, and doesn't have multiple statements
-  return startsWithAllowed && !containsDisallowed && !hasMultipleStatements;
 }
 
 /**
- * Validates if a SQL query is safe to execute
- * @param query SQL query to validate
- * @throws Error if the query is not safe
+ * Validates if a SQL query is allowed based on the configured permissions.
+ * @param query SQL query to validate.
+ * @param allowDml Whether DML operations are permitted.
+ * @param allowDdl Whether DDL operations are permitted.
+ * @returns true if the query is allowed, false otherwise.
  */
-export function validateQuery(query: string): void {
-  console.error("[Validator] Validating query:", query);
+// Corrected name: isAllowedQuery
+export function isAllowedQuery(query: string, allowDml: boolean, allowDdl: boolean): boolean {
+  const normalizedQuery = normalizeQuery(query);
+
+  if (!normalizedQuery) {
+    console.error("[Validator] Query rejected: Empty query.");
+    return false;
+  }
+
+  // Basic check for multiple statements (imperfect but catches simple cases)
+  // We disallow semicolons unless it's the very last character.
+  if (normalizedQuery.includes(";") && !normalizedQuery.endsWith(";")) {
+     console.error("[Validator] Query rejected: Multiple statements detected (contains ';').");
+     return false;
+  }
+
+  // Identify the first command word
+  const command = normalizedQuery.split(/[\s;()]+/)[0];
+  if (!command) {
+     console.error("[Validator] Query rejected: Could not identify command.");
+     return false; // Should not happen if normalizedQuery is not empty
+  }
+
+  // 1. Check if the command is *always* disallowed
+  if (ALWAYS_DISALLOWED_COMMANDS.includes(command)) {
+    console.error(`[Validator] Query rejected: Command '${command}' is always disallowed.`);
+    return false;
+  }
+
+  // 2. Check DQL (always allowed)
+  if (DQL_COMMANDS.includes(command)) {
+    console.log(`[Validator] Query allowed: DQL command '${command}'.`);
+    return true; // Multiple statements already checked
+  }
+
+  // 3. Check DML (allowed only if allowDml is true)
+  if (DML_COMMANDS.includes(command)) {
+    if (allowDml) {
+      console.log(`[Validator] Query allowed: DML command '${command}' (DML enabled).`);
+      return true; // Multiple statements already checked
+    } else {
+      console.error(`[Validator] Query rejected: DML command '${command}' requires MARIADB_ALLOW_DML=true.`);
+      return false;
+    }
+  }
+
+  // 4. Check DDL (allowed only if allowDdl is true)
+  if (DDL_COMMANDS.includes(command)) {
+    if (allowDdl) {
+      console.log(`[Validator] Query allowed: DDL command '${command}' (DDL enabled).`);
+      return true; // Multiple statements already checked
+    } else {
+      console.error(`[Validator] Query rejected: DDL command '${command}' requires MARIADB_ALLOW_DDL=true.`);
+      return false;
+    }
+  }
+
+  // 5. If the command is not in any recognized list, deny by default for safety.
+  console.warn(`[Validator] Query rejected: Command '${command}' is not recognized or explicitly allowed.`);
+  return false;
+}
+
+/**
+ * Validates if a SQL query is safe and permitted to execute.
+ * @param query SQL query to validate.
+ * @param allowDml Whether DML operations are permitted.
+ * @param allowDdl Whether DDL operations are permitted.
+ * @throws Error if the query is not valid or not permitted.
+ */
+export function validateQuery(query: string, allowDml: boolean, allowDdl: boolean): void {
+  console.error(`[Validator] Validating query (DML:${allowDml}, DDL:${allowDdl}): ${query.substring(0, 100)}...`);
 
   if (!query || typeof query !== "string") {
     throw new Error("Query must be a non-empty string");
   }
 
-  if (!isAlloowedQuery(query)) {
-    console.error("[Validator] Query rejected: not allowed");
+  // Pass permissions flags to the check function
+  if (!isAllowedQuery(query, allowDml, allowDdl)) {
+    // The specific reason is logged within isAllowedQuery
     throw new Error(
-      "Query contains disallowed commands or is not permitted by current configuration"
+      "Query is not permitted. Check server logs for details (check command type, DML/DDL permissions, multiple statements, or disallowed commands)."
     );
   }
 
-  console.error("[Validator] Query validated");
+  console.error("[Validator] Query validated successfully.");
 }

@@ -3,15 +3,15 @@
  */
 
 // MariaDB connection configuration
+// MariaDB connection configuration
 export interface MariaDBConfig {
   host: string;
   port: number;
   user: string;
   password: string;
   database?: string;
-  allow_insert: boolean;
-  allow_update: boolean;
-  allow_delete: boolean;
+  allow_dml: boolean; // Data Manipulation Language (INSERT, UPDATE, DELETE, REPLACE)
+  allow_ddl: boolean; // Data Definition Language (CREATE, ALTER, DROP, TRUNCATE, RENAME)
 }
 
 // Database information

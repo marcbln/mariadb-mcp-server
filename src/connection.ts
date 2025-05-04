@@ -4,7 +4,7 @@
 
 import mariadb from "mariadb";
 import { MariaDBConfig } from "./types.js";
-import { isAlloowedQuery } from "./validators.js";
+import { isAllowedQuery } from "./validators.js";
 
 // Default connection timeout in milliseconds
 const DEFAULT_TIMEOUT = 10000;
@@ -13,6 +13,8 @@ const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_ROW_LIMIT = 1000;
 
 let pool: mariadb.Pool | null = null;
+let allowDml: boolean = false; // Module-level variable for DML permission
+let allowDdl: boolean = false; // Module-level variable for DDL permission
 
 /**
  * Create a MariaDB connection pool
@@ -29,6 +31,10 @@ export function createConnectionPool(config?: MariaDBConfig): mariadb.Pool {
   // Determine configuration: use provided config or get from environment
   const poolConfig = config || getConfigFromEnv();
   console.error(`[Setup] Using configuration: ${config ? 'provided' : 'from environment'}`);
+
+  // Store permissions from the configuration
+  allowDml = poolConfig.allow_dml;
+  allowDdl = poolConfig.allow_ddl;
 
   try {
     console.error("[Setup] Creating new connection pool instance.");
@@ -79,7 +85,8 @@ export async function executeQuery(
       console.error(`[Query] Using database: ${database}`);
       await conn.query(`USE \`${database}\``);
     }
-    if (!isAlloowedQuery(sql)) {
+    // Pass the stored permissions to the validator
+    if (!isAllowedQuery(sql, allowDml, allowDdl)) {
       throw new Error("Query not allowed");
     }
     // Execute query with timeout
@@ -161,9 +168,8 @@ export function getConfigFromEnv(): MariaDBConfig {
   const user = process.env.MARIADB_USER;
   const password = process.env.MARIADB_PASSWORD;
   const database = process.env.MARIADB_DATABASE;
-  const allow_insert = process.env.MARIADB_ALLOW_INSERT === "true";
-  const allow_update = process.env.MARIADB_ALLOW_UPDATE === "true";
-  const allow_delete = process.env.MARIADB_ALLOW_DELETE === "true";
+const allow_dml = process.env.MARIADB_ALLOW_DML === "true"; // Default false
+const allow_ddl = process.env.MARIADB_ALLOW_DDL === "true"; // Default false
 
   if (!host) throw new Error("MARIADB_HOST environment variable is required");
   if (!user) throw new Error("MARIADB_USER environment variable is required");
@@ -177,6 +183,8 @@ export function getConfigFromEnv(): MariaDBConfig {
     port: port,
     user: user,
     database: database || "(default not set)",
+    allow_dml: allow_dml, // New
+    allow_ddl: allow_ddl, // New
   });
 
   return {
@@ -185,9 +193,8 @@ export function getConfigFromEnv(): MariaDBConfig {
     user,
     password,
     database,
-    allow_insert,
-    allow_update,
-    allow_delete,
+    allow_dml, // New
+    allow_ddl, // New
   };
 }
 

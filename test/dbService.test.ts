@@ -13,9 +13,8 @@ describe("dbService", () => {
     password: '11111',
     database: 'mariadb_mcp_test_db', // From test-setup.js
     // Add missing properties required by MariaDBConfig type
-    allow_insert: true,
-    allow_update: true,
-    allow_delete: true
+    allow_dml: false,
+    allow_ddl: false,
   };
   const testDbName = testConfig.database;
 
