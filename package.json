@@ -2,6 +2,7 @@
   "name": "mariadb-mcp-server",
   "version": "0.0.1",
   "description": "An MCP server that provides access to MariaDB ou MySQL databases.",
+  "type": "module",
   "bin": {
     "mysql-mcp-server": "dist/index.js"
   },
@@ -9,7 +10,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
+    "build": "rm -rf dist && tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector dist/index.js",

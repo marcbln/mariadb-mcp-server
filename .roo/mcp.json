@@ -17,6 +17,12 @@
         "MARIADB_TIMEOUT_MS": "10000",
         "MARIADB_ROW_LIMIT": "1000"
       }
+    },
+    "mcp-advisor": {
+      "command": "npx",
+      "args": [
+        "mcp-advisor@latest"
+      ]
     }
   }
 }

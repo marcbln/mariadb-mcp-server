@@ -5,8 +5,8 @@
 
 // test/connection.test.ts
 import mariadb from "mariadb"; // Added import
-import { createConnectionPool, endConnection, executeQuery, PoolConnectionDetails } from "../src/connection"; // Added PoolConnectionDetails
-import { MariaDBConfig } from "../src/types";
+import { createConnectionPool, endConnection, executeQuery, PoolConnectionDetails } from "../src/connection.js"; // Added PoolConnectionDetails
+import { MariaDBConfig } from "../src/types.js";
 
 // Base test config - permissions will be overridden in describe blocks
 const baseTestConfig: Omit<MariaDBConfig, 'allow_dml' | 'allow_ddl'> = {

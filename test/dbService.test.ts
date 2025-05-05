@@ -1,7 +1,7 @@
 import mariadb from "mariadb"; // Added import
-import { analyzeTables } from "../src/dbService";
-import { createConnectionPool, endConnection, PoolConnectionDetails } from "../src/connection"; // Added PoolConnectionDetails
-import { MariaDBConfig } from "../src/types"; // Added import
+import { analyzeTables } from "../src/dbService.js";
+import { createConnectionPool, endConnection, PoolConnectionDetails } from "../src/connection.js"; // Added PoolConnectionDetails
+import { MariaDBConfig } from "../src/types.js"; // Added import
 
 // Note: This test suite assumes that the test database and tables have been set up
 // by running the test-setup.js script before running these tests.

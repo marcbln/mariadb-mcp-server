@@ -1,5 +1,5 @@
 // test/permissionService.test.ts
-import { checkPermissions } from "../src/permissionService"; // Adjust path as necessary
+import { checkPermissions } from "../src/permissionService.js"; // Adjust path as necessary
 
 describe("PermissionService: checkPermissions", () => {
 

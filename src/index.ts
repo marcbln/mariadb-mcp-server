@@ -30,13 +30,14 @@ import {
 } from "./connection.js";
 import { analyzeTables } from "./dbService.js";
 
+
 /**
  * Create an MCP server with tools for MariaDB database access
  */
 const server = new Server(
   {
     name: "mariadb-mcp-server",
-    version: "0.0.1", // Consider incrementing version later
+    version: "0.0.2", // Consider incrementing version later
   },
   {
     capabilities: {
@@ -125,8 +126,54 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Global variable to hold pool details after initialization
+// Global variable to hold pool details. Initialized lazily.
 let poolDetails: PoolConnectionDetails | null = null;
+
+/**
+ * Helper function to initialize the connection pool on demand.
+ * Throws McpError if initialization fails.
+ */
+async function getOrCreatePoolDetails(): Promise<PoolConnectionDetails> {
+  if (poolDetails) {
+    return poolDetails;
+  }
+
+  console.error("[Lazy Init] Initializing MariaDB connection pool...");
+  try {
+    const config = getConfigFromEnv(); // Can throw config errors
+    poolDetails = createConnectionPool(config); // Can throw pool creation errors
+    console.error("[Lazy Init] Connection pool initialized successfully.");
+
+    // Optional: Add a quick connection test
+    const conn = await poolDetails.pool.getConnection();
+    await conn.ping();
+    await conn.release();
+    console.error("[Lazy Init] Database connection verified.");
+
+    return poolDetails;
+  } catch (error) {
+    console.error("[Fatal Lazy Init] Entered catch block. Error:", error); // <-- Add log
+    // Ensure pool is null if initialization failed partially
+    if (poolDetails?.pool) {
+        try {
+            console.error("[Fatal Lazy Init] Attempting pool cleanup..."); // <-- Add log
+            await endConnection(poolDetails.pool);
+            console.error("[Fatal Lazy Init] Pool cleanup successful."); // <-- Add log
+        } catch (e) {
+            console.error("[Fatal Lazy Init] Pool cleanup failed:", e); // <-- Add log
+         }
+    }
+    poolDetails = null;
+    // Convert initialization error to McpError
+    const mcpErr = new McpError( // Create error first
+        ErrorCode.InternalError, // Use standard InternalError for initialization failures
+        `Failed to initialize database connection: ${error instanceof Error ? error.message : String(error)}`
+    );
+    console.error(`[Fatal Lazy Init] Throwing McpError: Code=${mcpErr.code}, Message=${mcpErr.message}`); // <-- Add log
+    throw mcpErr; // Throw the created error
+  }
+}
+
 
 /**
  * Handler for MariaDB database access tools
@@ -135,18 +182,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Log the raw incoming request *before* anything else
   console.error(`[Index Handler] Received tool call request: ${JSON.stringify(request)}`);
 
-  // Ensure pool is initialized before handling tool calls
-  if (!poolDetails) {
-      console.error("[Error] Connection pool not initialized before tool call.");
-      throw new McpError(ErrorCode.InternalError, "Database connection pool is not ready.");
-  }
-  const { pool, allowDml, allowDdl } = poolDetails; // Destructure for use
+  // REMOVED Eager pool check. Will initialize lazily per tool.
 
   try {
+    // Force pool initialization attempt immediately within the main try block
+    console.error("[Index Handler] Attempting eager pool initialization for tool call...");
+    const currentPoolDetails = await getOrCreatePoolDetails();
+    console.error("[Index Handler] Eager pool initialization successful (or already initialized).");
+
     switch (request.params.name) {
       case "list_databases": {
         console.error("[Tool] Executing list_databases");
-        // Pass pool and permissions to executeQuery
+        // Use the already initialized pool details
+        const { pool, allowDml, allowDdl } = currentPoolDetails;
         const { rows } = await executeQuery(pool, allowDml, allowDdl, "SHOW DATABASES");
         return {
           content: [
@@ -160,12 +208,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "list_tables": {
         console.error("[Tool] Executing list_tables");
+        // Use the already initialized pool details
+        const { pool, allowDml, allowDdl } = currentPoolDetails;
 
         const database = request.params.arguments?.database as
           | string
           | undefined;
 
-        // Pass pool and permissions to executeQuery
         const { rows } = await executeQuery(pool, allowDml, allowDdl, "SHOW FULL TABLES", [], database);
 
         return {
@@ -182,6 +231,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "analyze_table_schema": { // Added case for analyze_table_schema
         console.error("[Tool] Executing analyze_table_schema");
+        // Use the already initialized pool details (variable name already matches)
 
         const args = request.params.arguments || {};
         const tableNames = args.table_names as string[] | undefined;
@@ -200,7 +250,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         console.error(`[Index] Calling analyzeDatabaseTables with: tableNames=${JSON.stringify(tableNames)}, detailLevel=${detailLevel}, database=${database}`); // <-- Add log
 
         // Call the dedicated analysis function
+        // Pass the lazily loaded poolDetails
         const analysisResult = await analyzeTables(
+          currentPoolDetails, // Pass the connection details obtained lazily
           tableNames,
           detailLevel || "STANDARD", // Pass default explicitly if undefined
           database
@@ -218,6 +270,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "execute_query": {
         console.error("[Tool] Executing execute_query");
+        // Use the already initialized pool details
+        const { pool, allowDml, allowDdl } = currentPoolDetails;
 
         const query = request.params.arguments?.query as string;
         const database = request.params.arguments?.database as
@@ -228,8 +282,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "Query is required");
         }
 
-
-        // Pass pool and permissions to executeQuery
         const { rows } = await executeQuery(pool, allowDml, allowDdl, query, [], database);
 
         return {
@@ -254,14 +306,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Format error message for client
     // Check if it's already an McpError
     if (error instanceof McpError) {
+        console.error(`[Error Handler] Re-throwing McpError: Code=${error.code}, Message=${error.message}`); // <-- Add log
         // Re-throw McpError so the server handles it correctly
         throw error;
+
     }
 
     // Otherwise, wrap it in a generic internal error McpError
+    // Include connection details if available
+    let errorMessage = `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`;
+    if (poolDetails?.config) {
+      // Include config details (including password as requested for dev)
+      const { host, port, user, password, database } = poolDetails.config;
+      errorMessage += ` | Connection Details: { host: ${host}, port: ${port}, user: ${user}, password: ${password}, database: ${database || '(default)'} }`;
+    }
     throw new McpError(
         ErrorCode.InternalError,
-        `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`
+        errorMessage
     );
   }
 });
@@ -273,22 +334,23 @@ async function main() {
   console.error("[Setup] Starting MariaDB MCP server");
 
   try {
-    // Initialize connection pool ONCE before connecting the server
-    console.error("[Setup] Initializing MariaDB connection pool...");
-    const config = getConfigFromEnv();
-    poolDetails = createConnectionPool(config); // Store pool details globally
-    console.error("[Setup] Connection pool initialized.");
+    // REMOVED Eager pool initialization
+    // console.error("[Setup] Initializing MariaDB connection pool...");
+    // const config = getConfigFromEnv();
+    // poolDetails = createConnectionPool(config); // Store pool details globally
+    // console.error("[Setup] Connection pool initialized.");
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("[Setup] MariaDB MCP server running on stdio");
+    console.error("[Setup] MariaDB MCP server running on stdio. Pool will be initialized lazily.");
   } catch (error) {
-    console.error("[Fatal] Failed to start server or initialize pool:", error);
-    // Attempt to close pool if it was created before error
-    if (poolDetails?.pool) {
-        await endConnection(poolDetails.pool);
-    }
-    process.exit(1);
+    // This catch block now primarily handles server.connect errors
+    console.error("[Fatal] Failed to start server:", error);
+    // Pool wouldn't be initialized here anyway with lazy loading
+    // if (poolDetails?.pool) {
+    //     await endConnection(poolDetails.pool);
+    // }
+    process.exit(1); // Exit if server connection fails
   }
 }
 
@@ -308,6 +370,7 @@ process.on("SIGINT", async () => {
 main().catch((error) => {
   // Catch McpErrors specifically if needed, otherwise log generic fatal error
   if (error instanceof McpError) {
+      console.error(`[Fatal Catch Block] Caught McpError. Code: ${error.code}, Message: ${error.message}`); // <-- Add log
       console.error(`[Fatal MCP Error] Code: ${error.code}, Message: ${error.message}`);
   } else {
       console.error("[Fatal] Unhandled error:", error);

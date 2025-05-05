@@ -22,6 +22,7 @@ export interface PoolConnectionDetails {
   pool: mariadb.Pool;
   allowDml: boolean;
   allowDdl: boolean;
+  config: MariaDBConfig; // Add the config used to create the pool
 }
 
 /**
@@ -29,6 +30,8 @@ export interface PoolConnectionDetails {
  * This function ALWAYS creates a new pool instance.
  */
 export function createConnectionPool(config?: MariaDBConfig): PoolConnectionDetails {
+  console.error(">>> ENTERING createConnectionPool <<<"); // ADDED TRACE
+  console.trace("createConnectionPool called from:"); // ADDED TRACE
   console.error("[Setup] Creating new MariaDB connection pool");
 
   // Determine configuration: use provided config or get from environment
@@ -51,6 +54,7 @@ export function createConnectionPool(config?: MariaDBConfig): PoolConnectionDeta
       bigIntAsNumber: true,
       connectionLimit: 2,
       connectTimeout: DEFAULT_TIMEOUT,
+      ssl: false, // Explicitly disable SSL
     });
     console.error("[Setup] New connection pool created successfully.");
   } catch (error) {
@@ -58,8 +62,8 @@ export function createConnectionPool(config?: MariaDBConfig): PoolConnectionDeta
     throw error; // Re-throw the error after logging
   }
 
-  // Return the pool and its associated permissions
-  return { pool: newPool, allowDml, allowDdl };
+  // Return the pool, its associated permissions, and the config used
+  return { pool: newPool, allowDml, allowDdl, config: poolConfig };
 }
 
 /**
@@ -85,8 +89,13 @@ export async function executeQuery(
   try {
     // Get connection from the provided pool
     console.error("[Query] Acquiring new connection from pool...");
-    conn = await pool.getConnection();
-    console.error("[Query] Connection acquired successfully");
+    try { // Add specific try/catch around getConnection
+      conn = await pool.getConnection();
+      console.error("[Query] Connection acquired successfully");
+    } catch (connectionError) {
+      console.error("[Error] Failed to acquire connection from pool:", connectionError); // Log the specific error
+      throw connectionError; // Re-throw to be caught by the outer catch
+    }
 
     // Use specific database if provided
     if (database) {
@@ -174,6 +183,8 @@ export async function executeQuery(
  * Get MariaDB connection configuration from environment variables
  */
 export function getConfigFromEnv(): MariaDBConfig {
+  console.error(">>> ENTERING getConfigFromEnv <<<"); // ADDED TRACE
+  console.trace("getConfigFromEnv called from:"); // ADDED TRACE
   const host = process.env.MARIADB_HOST;
   const portStr = process.env.MARIADB_PORT;
   const user = process.env.MARIADB_USER;
