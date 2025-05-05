@@ -81,6 +81,30 @@ export async function analyzeTables(
         continue; // Skip this table
      }
 
+     // --- ADD TABLE EXISTENCE CHECK ---
+     try {
+         const checkSql = `
+             SELECT COUNT(*) as count
+             FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = :dbName AND TABLE_NAME = :tableName;
+         `;
+         const { pool, allowDml, allowDdl } = poolDetails;
+         const { rows: checkRows } = await executeQuery(pool, allowDml, allowDdl, checkSql, { dbName, tableName }, undefined);
+
+         if (checkRows.length === 0 || checkRows[0].count === 0) {
+             console.warn(`[Analyze] Table ${dbName}.${tableName} does not exist. Skipping analysis.`);
+             results[tableName] = { error: `Table '${tableName}' does not exist in database '${dbName}'.` };
+             continue; // Skip to the next table
+         }
+     } catch (checkError: any) {
+         console.error(`[Error] Failed to check existence for table ${dbName}.${tableName}:`, checkError);
+         results[tableName] = {
+             error: `Failed to check existence for table '${tableName}': ${checkError.message || String(checkError)}`
+         };
+         continue; // Skip to the next table if check fails
+     }
+     // --- END TABLE EXISTENCE CHECK ---
+
     console.error(`[Analyze] Analyzing table: ${dbName}.${tableName} with flags: ${flags.join(', ')}`);
     const tableResult: any = {};
 
