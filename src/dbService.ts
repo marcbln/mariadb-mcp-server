@@ -1,6 +1,7 @@
 import mariadb from "mariadb"; // Added import
 import { executeQuery, getConfigFromEnv, PoolConnectionDetails } from "./connection.js"; // Added PoolConnectionDetails
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { toCamelCase } from "./stringUtils.js";
 
 /**
  * Enum defining the granular details that can be fetched for table schema analysis.
@@ -164,8 +165,8 @@ export async function fetchBasicColumnDetails(
   // Placeholder SQL using INFORMATION_SCHEMA.COLUMNS
   const sql = `
     SELECT
-        COLUMN_NAME AS name,
-        COLUMN_TYPE AS type
+        COLUMN_NAME AS \`name\`,
+        COLUMN_TYPE AS \`type\`
     FROM
         INFORMATION_SCHEMA.COLUMNS
     WHERE
@@ -190,15 +191,15 @@ export async function fetchFullColumnDetails(
    // Placeholder SQL using INFORMATION_SCHEMA.COLUMNS - similar to old describe_table
    const sql = `
    SELECT
-       COLUMN_NAME AS name,
-       COLUMN_TYPE AS type,
-       IS_NULLABLE AS is_nullable,
-       COLUMN_KEY AS \`key\`,
-       COLUMN_DEFAULT AS \`default\`,
-       EXTRA AS extra,
-       COLUMN_COMMENT AS comment,
-       CHARACTER_SET_NAME as character_set,
-       COLLATION_NAME as collation
+       COLUMN_NAME AS \`name\`,
+       COLUMN_TYPE AS \`type\`,
+       IS_NULLABLE AS \`isNullable\`,
+       COLUMN_KEY AS \`columnKey\`,
+       COLUMN_DEFAULT AS \`columnDefault\`,
+       EXTRA AS \`extra\`,
+       COLUMN_COMMENT AS \`comment\`,
+       CHARACTER_SET_NAME as \`characterSet\`,
+       COLLATION_NAME as \`collation\`
    FROM
        INFORMATION_SCHEMA.COLUMNS
    WHERE
@@ -221,13 +222,13 @@ export async function fetchForeignKeyDetails(
   // Placeholder SQL using INFORMATION_SCHEMA.KEY_COLUMN_USAGE and REFERENTIAL_CONSTRAINTS
   const sql = `
     SELECT
-        kcu.CONSTRAINT_NAME as constraint_name,
-        kcu.COLUMN_NAME as column_name,
-        kcu.REFERENCED_TABLE_SCHEMA as referenced_database,
-        kcu.REFERENCED_TABLE_NAME as referenced_table,
-        kcu.REFERENCED_COLUMN_NAME as referenced_column,
-        rc.UPDATE_RULE as on_update,
-        rc.DELETE_RULE as on_delete
+        kcu.CONSTRAINT_NAME as \`constraintName\`,
+        kcu.COLUMN_NAME as \`columnName\`,
+        kcu.REFERENCED_TABLE_SCHEMA as \`referencedDatabase\`,
+        kcu.REFERENCED_TABLE_NAME as \`referencedTable\`,
+        kcu.REFERENCED_COLUMN_NAME as \`referencedColumn\`,
+        rc.UPDATE_RULE as \`onUpdate\`,
+        rc.DELETE_RULE as \`onDelete\`
     FROM
         information_schema.KEY_COLUMN_USAGE kcu
     JOIN
@@ -248,14 +249,14 @@ export async function fetchBasicIndexDetails(
     poolDetails: PoolConnectionDetails, // Added poolDetails
     dbName: string,
     tableName: string
-): Promise<{ index_name: string; columns: string[] }[]> { // Updated return type
+): Promise<{ indexName: string; columns: string[] }[]> { // Updated return type
   console.log(`[Stub] Fetching basic indexes (with columns) for ${dbName}.${tableName}`);
   // Query INFORMATION_SCHEMA.STATISTICS to get index and column names
   const sql = `
     SELECT
-        INDEX_NAME as index_name,
-        COLUMN_NAME as column_name,
-        SEQ_IN_INDEX as seq_in_index -- To maintain column order
+        INDEX_NAME as \`indexName\`,
+        COLUMN_NAME as \`columnName\`,
+        SEQ_IN_INDEX as \`seqInIndex\` -- To maintain column order
     FROM
         INFORMATION_SCHEMA.STATISTICS
     WHERE
@@ -272,15 +273,15 @@ export async function fetchBasicIndexDetails(
   // Process rows to group columns by index name
   const indexes: Record<string, string[]> = {};
   for (const row of rawRows) {
-    if (!indexes[row.index_name]) {
-      indexes[row.index_name] = [];
+    if (!indexes[row.indexName]) {
+      indexes[row.indexName] = [];
     }
-    indexes[row.index_name].push(row.column_name);
+    indexes[row.indexName].push(row.columnName);
   }
 
   // Convert the grouped object into the desired array format
   const result = Object.entries(indexes).map(([indexName, columns]) => ({
-    index_name: indexName,
+    indexName: indexName,
     columns: columns,
   }));
 
@@ -301,5 +302,13 @@ export async function fetchFullIndexDetails(
   // Use new executeQuery signature
   const { pool, allowDml, allowDdl } = poolDetails;
   const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, [], dbName);
-  return rows;
+  // Transform keys to camelCase
+  return rows.map((row: any) => {
+    const camelCaseRow: Record<string, any> = {};
+    for (const [key, value] of Object.entries(row)) {
+      // Ensure key is treated as string before passing to toCamelCase
+      camelCaseRow[toCamelCase(String(key))] = value;
+    }
+    return camelCaseRow;
+  });
 }
