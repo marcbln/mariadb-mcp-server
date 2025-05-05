@@ -215,12 +215,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           | string
           | undefined;
 
-        const { rows } = await executeQuery(pool, allowDml, allowDdl, "SHOW FULL TABLES", [], database);
+        const sql = `
+          SELECT
+              TABLE_NAME AS name,
+              TABLE_TYPE AS type,
+              ENGINE AS engine,
+              TABLE_COLLATION AS collation,
+              DATA_LENGTH AS dataLength,
+              INDEX_LENGTH AS indexLength,
+              DATA_FREE AS dataFree,
+              AUTO_INCREMENT AS autoIncrement,
+              TABLE_ROWS,
+              TABLE_COMMENT AS comment
+          FROM
+              INFORMATION_SCHEMA.TABLES
+          WHERE
+              TABLE_SCHEMA = :databaseName
+          ORDER BY
+              TABLE_NAME;
+        `;
+        // Note: executeQuery handles using the default database if 'database' is undefined
+        // and substitutes :databaseName correctly.
+        const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { databaseName: database }, database);
 
         return {
           content: [
             {
               type: "text",
+              // The rows already have the correct aliases from the SQL query
               text: JSON.stringify(rows, null, 2),
             },
           ],
