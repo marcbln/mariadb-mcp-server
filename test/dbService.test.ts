@@ -77,13 +77,13 @@ describe("dbService", () => {
       expect(result.test_users).toHaveProperty("columns");
       expect(Array.isArray(result.test_users.columns)).toBe(true);
       expect(result.test_users.columns.length).toBeGreaterThan(0);
-      expect(result.test_users).toHaveProperty("foreign_keys");
-      expect(Array.isArray(result.test_users.foreign_keys)).toBe(true);
+      expect(result.test_users).toHaveProperty("foreignKeys");
+      expect(Array.isArray(result.test_users.foreignKeys)).toBe(true);
       expect(result.test_users).toHaveProperty("indexes");
       expect(Array.isArray(result.test_users.indexes)).toBe(true);
 
       // Check for expected foreign key structure (basic)
-      const orderTableFKs = result.test_orders?.foreign_keys;
+      const orderTableFKs = result.test_orders?.foreignKeys;
       expect(orderTableFKs).toBeDefined();
       expect(orderTableFKs.length).toBeGreaterThan(0);
       expect(orderTableFKs[0]).toHaveProperty("constraint_name");
@@ -110,8 +110,8 @@ describe("dbService", () => {
         expect(result.test_users).toHaveProperty("columns");
         expect(Array.isArray(result.test_users.columns)).toBe(true);
         expect(result.test_users.columns.length).toBeGreaterThan(0);
-        expect(result.test_users).toHaveProperty("foreign_keys");
-        expect(Array.isArray(result.test_users.foreign_keys)).toBe(true);
+        expect(result.test_users).toHaveProperty("foreignKeys");
+        expect(Array.isArray(result.test_users.foreignKeys)).toBe(true);
         expect(result.test_users).toHaveProperty("indexes");
         expect(Array.isArray(result.test_users.indexes)).toBe(true);
 
@@ -128,7 +128,7 @@ describe("dbService", () => {
         expect(userTableColumns[0]).toHaveProperty("collation");
 
         // Check for expected full foreign key structure
-        const orderTableFKs = result.test_orders?.foreign_keys;
+        const orderTableFKs = result.test_orders?.foreignKeys;
         expect(orderTableFKs).toBeDefined();
         expect(orderTableFKs.length).toBeGreaterThan(0);
         expect(orderTableFKs[0]).toHaveProperty("on_update");
@@ -139,10 +139,11 @@ describe("dbService", () => {
         expect(userTableIndexes).toBeDefined();
         expect(userTableIndexes.length).toBeGreaterThan(0);
         // Full index details from SHOW INDEX include more columns, e.g., Column_name, Seq_in_index, etc.
-        expect(userTableIndexes[0]).toHaveProperty("Column_name");
-        expect(userTableIndexes[0]).toHaveProperty("Seq_in_index");
-        expect(userTableIndexes[0]).toHaveProperty("Collation");
-        expect(userTableIndexes[0]).toHaveProperty("Cardinality");
+        // Check for expected full index structure (now with camelCase keys)
+        expect(userTableIndexes[0]).toHaveProperty("columnName"); // Changed from Column_name
+        expect(userTableIndexes[0]).toHaveProperty("seqInIndex"); // Changed from Seq_in_index
+        expect(userTableIndexes[0]).toHaveProperty("collation"); // Changed from Collation
+        expect(userTableIndexes[0]).toHaveProperty("cardinality"); // Changed from Cardinality
     });
 
     it("should handle invalid table names gracefully", async () => {

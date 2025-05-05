@@ -125,7 +125,7 @@ export async function analyzeTables(
 
       if (flags.includes(SchemaDetailFlag.FOREIGN_KEYS)) {
         // Pass poolDetails down
-        tableResult.foreign_keys = await fetchForeignKeyDetails(poolDetails, dbName, tableName);
+        tableResult.foreignKeys = await fetchForeignKeyDetails(poolDetails, dbName, tableName);
       }
 
       // INDEXES_FULL implies INDEXES_BASIC
