@@ -9,7 +9,7 @@ export enum SchemaDetailFlag {
   COLUMNS_BASIC = "COLUMNS_BASIC", // Column Name, Type
   COLUMNS_FULL = "COLUMNS_FULL",   // All column attributes
   FOREIGN_KEYS = "FOREIGN_KEYS", // FK constraints + rules
-  INDEXES_BASIC = "INDEXES_BASIC", // Index names only
+  INDEXES_BASIC = "INDEXES_BASIC", // Index names and associated columns
   INDEXES_FULL = "INDEXES_FULL",   // All index attributes
 }
 
@@ -248,23 +248,43 @@ export async function fetchBasicIndexDetails(
     poolDetails: PoolConnectionDetails, // Added poolDetails
     dbName: string,
     tableName: string
-): Promise<any[]> {
-  console.log(`[Stub] Fetching basic indexes for ${dbName}.${tableName}`);
-  // Placeholder using SHOW INDEX - needs careful handling as it doesn't use placeholders well
-  // Alternative: Query INFORMATION_SCHEMA.STATISTICS and group by index name
-   const sql = `
-   SELECT DISTINCT
-       INDEX_NAME as index_name
-   FROM
-       INFORMATION_SCHEMA.STATISTICS
-   WHERE
-       TABLE_SCHEMA = :dbName
-       AND TABLE_NAME = :tableName;
- `;
- // Use new executeQuery signature
- const { pool, allowDml, allowDdl } = poolDetails;
- const { rows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
- return rows;
+): Promise<{ index_name: string; columns: string[] }[]> { // Updated return type
+  console.log(`[Stub] Fetching basic indexes (with columns) for ${dbName}.${tableName}`);
+  // Query INFORMATION_SCHEMA.STATISTICS to get index and column names
+  const sql = `
+    SELECT
+        INDEX_NAME as index_name,
+        COLUMN_NAME as column_name,
+        SEQ_IN_INDEX as seq_in_index -- To maintain column order
+    FROM
+        INFORMATION_SCHEMA.STATISTICS
+    WHERE
+        TABLE_SCHEMA = :dbName
+        AND TABLE_NAME = :tableName
+    ORDER BY
+        INDEX_NAME,
+        SEQ_IN_INDEX;
+  `;
+  // Use new executeQuery signature
+  const { pool, allowDml, allowDdl } = poolDetails;
+  const { rows: rawRows } = await executeQuery(pool, allowDml, allowDdl, sql, { dbName, tableName }, undefined);
+
+  // Process rows to group columns by index name
+  const indexes: Record<string, string[]> = {};
+  for (const row of rawRows) {
+    if (!indexes[row.index_name]) {
+      indexes[row.index_name] = [];
+    }
+    indexes[row.index_name].push(row.column_name);
+  }
+
+  // Convert the grouped object into the desired array format
+  const result = Object.entries(indexes).map(([indexName, columns]) => ({
+    index_name: indexName,
+    columns: columns,
+  }));
+
+  return result;
 }
 
 export async function fetchFullIndexDetails(
